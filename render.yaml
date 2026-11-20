@@ -1,0 +1,92 @@
+# Render Blueprint for the DEMO environment (what reviewers use): one-click demo accounts, sample documents,
+# scenario lab. The production environment is a separate Blueprint (render.production.yaml) with its own database.
+# New → Blueprint → pick this repo. You'll be asked for the values marked `sync: false` (see README → Deploy).
+services:
+  # FastAPI + LangGraph workflow + background worker
+  - type: web
+    name: maplelaunch-api
+    runtime: python
+    plan: free
+    rootDir: apps/api
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.serve
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: ENV
+        value: production
+      - key: APP_MODE
+        value: demo
+      - key: AUTH_MODE
+        value: supabase
+      - key: STORAGE_MODE
+        value: supabase
+      - key: DATABASE_URL          # Supabase → Connect → Session pooler (port 5432)
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET   # only for projects still on the legacy HS256 JWT secret; leave empty otherwise
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_API_KEYS         # optional extra keys, comma-separated
+        sync: false
+      - key: RESEND_API_KEY        # optional
+        sync: false
+      - key: APP_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: BLIND_INDEX_KEY
+        generateValue: true
+      - key: WEBHOOK_SECRET
+        generateValue: true
+      - key: PROVIDER_ADMIN_TOKEN
+        generateValue: true
+      - key: DEMO_PASSWORD
+        value: MapleLaunch@2026
+      - key: PUBLIC_API_URL
+        fromService: { type: web, name: maplelaunch-api, property: host }
+      - key: PROVIDERS_BASE_URL
+        fromService: { type: web, name: maplelaunch-mock, property: host }
+      - key: WEB_ORIGIN
+        fromService: { type: web, name: maplelaunch-web, property: host }
+
+  # Simulated PAN / GST / bank / risk providers + merchant-ID service
+  - type: web
+    name: maplelaunch-mock
+    runtime: python
+    plan: free
+    rootDir: apps/mock_providers
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m mock.serve
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DATABASE_URL
+        fromService: { type: web, name: maplelaunch-api, envVarKey: DATABASE_URL }
+      - key: WEBHOOK_SECRET
+        fromService: { type: web, name: maplelaunch-api, envVarKey: WEBHOOK_SECRET }
+      - key: PROVIDER_ADMIN_TOKEN
+        fromService: { type: web, name: maplelaunch-api, envVarKey: PROVIDER_ADMIN_TOKEN }
+
+  # Next.js static export (static sites never sleep)
+  - type: web
+    name: maplelaunch-web
+    runtime: static
+    rootDir: apps/web
+    buildCommand: npm ci && npm run build
+    staticPublishPath: out
+    envVars:
+      - key: NEXT_PUBLIC_APP_MODE
+        value: demo
+      - key: NEXT_PUBLIC_API_URL
+        fromService: { type: web, name: maplelaunch-api, property: host }

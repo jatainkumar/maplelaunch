@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --color-maple-50: #fff4ed;
+  --color-maple-100: #ffe6d5;
+  --color-maple-200: #feccaa;
+  --color-maple-300: #fdac74;
+  --color-maple-400: #fb8a3c;
+  --color-maple-500: #f06a1a;
+  --color-maple-600: #d9480f;
+  --color-maple-700: #b4380d;
+  --color-maple-800: #8f2f12;
+  --color-maple-900: #742a12;
+  --animate-fade-in: fade-in 0.25s ease-out;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Slightly larger default scale: every Tailwind size is rem-based, so this zooms the whole UI evenly. */
+html { color-scheme: light; font-size: 106.25%; }
+@media (min-width: 64rem) { html { font-size: 112.5%; } }
+body { background: #fafaf9; color: #18181b; }
+
+:focus-visible { outline: 2px solid var(--color-maple-500); outline-offset: 2px; }

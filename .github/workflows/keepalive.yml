@@ -1,0 +1,15 @@
+# Render free web services sleep after ~15 min idle. During demo days, this pings the API every
+# 10 minutes between 09:00 and 23:00 IST so reviewers don't hit a cold start.
+# Set the repository variable API_URL (e.g. https://maplelaunch-api.onrender.com) to enable it.
+name: Keep demo warm
+on:
+  schedule:
+    - cron: "*/10 3-17 * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    if: ${{ vars.API_URL != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS --max-time 90 "${{ vars.API_URL }}/healthz" || true

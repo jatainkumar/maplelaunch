@@ -1,0 +1,84 @@
+%%{init: {"theme":"base","themeVariables":{"clusterBkg":"#FAFAFA","clusterBorder":"#D4D4D8","lineColor":"#71717A","fontSize":"15px"}}}%%
+flowchart TD
+  subgraph L["Request-info loop, used wherever you see ↺"]
+    L1["AI drafts a specific request → in-app inbox and email<br/>merchant replies → back to step 2, only affected checks re-run<br/>no reply for N days → Withdrawn"]
+  end
+
+  subgraph M["1 · Merchant portal"]
+    A1([Merchant signs in]) --> A2["Choose business type<br/>Proprietorship · Partnership · Pvt Ltd"]
+    A2 --> A3["Upload documents<br/>checklist adapts to business type"]
+    A3 --> A4["AI autofill<br/>Gemini, Groq as fallback"]
+    A4 --> A5["Review fields<br/>confidence badge on each"]
+    A5 --> A6["Bank details<br/>live IFSC lookup"]
+    A6 --> A7[Consent and submit]
+  end
+
+  subgraph D["2 · Document intelligence"]
+    B1["Extract fields and quality score"] --> B2{"Legible and the<br/>right document?"}
+    B2 -- no --> RQ1[["↺ Ask merchant to re-upload"]]
+    B2 -- yes --> B3["Validate: completeness, PAN and GSTIN<br/>format and checksum, cross-document names"]
+    B3 --> B4{Consistent with form?}
+    B4 -- no --> RQ2[["↺ Ask merchant to confirm or fix"]]
+    B4 -- yes --> B5["Duplicate and entity matching<br/>matches flagged for the decision"]
+  end
+
+  subgraph V["3 · Parallel verification, asynchronous"]
+    C0["Dispatch checks<br/>idempotency key and deadline"]
+    C0 --> P1[PAN] & P2[GST] & P3[Bank penny-drop] & P4[Risk score]
+    P1 & P2 & P3 & P4 --> W["Workflow paused<br/>waiting for callbacks"]
+    W -- "signed webhook arrives" --> C2{Callback check}
+    C2 -- "duplicate · late and superseded · bad signature" --> C2x["Logged, not applied"]
+    C2 -- valid --> C3[Update check result]
+    C3 --> C4{All 4 checks done?}
+    C4 -- no --> W
+    W -- "deadline passed" --> T2{Retries left?}
+    T2 -- yes --> C0
+    T2 -- "no: check marked ERROR" --> C4
+  end
+
+  DE{{"4 · Decision engine<br/>AI agent inside policy guardrails"}}
+
+  subgraph H["5 · Human review queue"]
+    H1["Operator sees AI summary, risk explanation,<br/>document vs form diff, duplicates"] --> H2{Reviewer decision}
+    H2 -- "request info" --> RQ4[["↺ Ask merchant"]]
+    H2 -- reject --> X1(["Rejected<br/>reason sent to merchant"])
+  end
+
+  subgraph P["6 · Activation"]
+    F1[Approved] --> F2["Create Merchant ID<br/>idempotent"]
+    F2 --> F3{Created?}
+    F3 -- yes --> F4(["Merchant LIVE<br/>MID issued, merchant notified"])
+    F3 -- "fails after 3 auto-retries" --> F5["Provisioning failed<br/>ops exception"]
+    F5 -- "operator retries" --> F2
+  end
+
+  subgraph G["7 · After go-live"]
+    G1[Merchant changes bank details] --> G2["Bank check invalidated<br/>payouts on hold"]
+    G2 --> G3{Re-verified?}
+    G3 -- yes --> G4[Payouts resumed]
+    G3 -- no --> G5[["→ Human review"]]
+  end
+
+  A7 --> B1
+  B5 --> C0
+  C4 -- yes --> DE
+  DE -- "all checks pass, low risk,<br/>high confidence, no duplicates" --> F1
+  DE -- "fixable issue, e.g. wrong GSTIN" --> RQ3[["↺ Ask merchant for a fix"]]
+  DE -- "uncertain · mismatch · high risk<br/>duplicate · critical failure" --> H1
+  H2 -- approve --> F1
+  F4 -.-> G1
+
+  classDef merchant fill:#EFF6FF,stroke:#3B82F6,color:#1E3A8A
+  classDef system fill:#FFFFFF,stroke:#71717A,color:#18181B
+  classDef ai fill:#F5F3FF,stroke:#7C3AED,color:#4C1D95
+  classDef human fill:#FFFBEB,stroke:#D97706,color:#78350F
+  classDef good fill:#ECFDF5,stroke:#059669,color:#064E3B
+  classDef bad fill:#FEF2F2,stroke:#DC2626,color:#7F1D1D
+  classDef loop fill:#FFF7ED,stroke:#EA580C,color:#7C2D12
+  class A1,A2,A3,A5,A6,A7,G1 merchant
+  class B2,B3,B4,B5,C0,P1,P2,P3,P4,W,C2,C3,C4,T2,F2,F3,G2,G3 system
+  class A4,B1,DE ai
+  class H1,H2,F5,G5 human
+  class F1,F4,G4 good
+  class X1,C2x bad
+  class L1,RQ1,RQ2,RQ3,RQ4 loop

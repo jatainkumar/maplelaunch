@@ -1,0 +1,95 @@
+# Render Blueprint for the PRODUCTION environment. Same code as the demo, built with APP_MODE=production:
+# no demo accounts, no sample documents, no scenario lab or reset button, and the API refuses to start with
+# development secrets. Use a separate Supabase project so demo and production data never mix.
+# New → Blueprint → pick this repo → Blueprint path: render.production.yaml.
+services:
+  # FastAPI + LangGraph workflow + background worker
+  - type: web
+    name: maplelaunch-prod-api
+    runtime: python
+    plan: free
+    rootDir: apps/api
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.serve
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: ENV
+        value: production
+      - key: APP_MODE
+        value: production
+      - key: ADMIN_EMAIL           # first admin account, created on first start
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: AUTH_MODE
+        value: supabase
+      - key: STORAGE_MODE
+        value: supabase
+      - key: DATABASE_URL          # Supabase → Connect → Session pooler (port 5432)
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET   # only for projects still on the legacy HS256 JWT secret; leave empty otherwise
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_API_KEYS         # optional extra keys, comma-separated
+        sync: false
+      - key: RESEND_API_KEY        # optional
+        sync: false
+      - key: APP_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: BLIND_INDEX_KEY
+        generateValue: true
+      - key: WEBHOOK_SECRET
+        generateValue: true
+      - key: PROVIDER_ADMIN_TOKEN
+        generateValue: true
+      - key: PUBLIC_API_URL
+        fromService: { type: web, name: maplelaunch-prod-api, property: host }
+      - key: PROVIDERS_BASE_URL
+        fromService: { type: web, name: maplelaunch-prod-providers, property: host }
+      - key: WEB_ORIGIN
+        fromService: { type: web, name: maplelaunch-prod-web, property: host }
+
+  # Provider gateway. Today this is the sandbox service; point PROVIDERS_BASE_URL at real KYC adapters to go live.
+  - type: web
+    name: maplelaunch-prod-providers
+    runtime: python
+    plan: free
+    rootDir: apps/mock_providers
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m mock.serve
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DATABASE_URL
+        fromService: { type: web, name: maplelaunch-prod-api, envVarKey: DATABASE_URL }
+      - key: WEBHOOK_SECRET
+        fromService: { type: web, name: maplelaunch-prod-api, envVarKey: WEBHOOK_SECRET }
+      - key: PROVIDER_ADMIN_TOKEN
+        fromService: { type: web, name: maplelaunch-prod-api, envVarKey: PROVIDER_ADMIN_TOKEN }
+
+  # Next.js static export (static sites never sleep)
+  - type: web
+    name: maplelaunch-prod-web
+    runtime: static
+    rootDir: apps/web
+    buildCommand: npm ci && npm run build
+    staticPublishPath: out
+    envVars:
+      - key: NEXT_PUBLIC_APP_MODE
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        fromService: { type: web, name: maplelaunch-prod-api, property: host }
