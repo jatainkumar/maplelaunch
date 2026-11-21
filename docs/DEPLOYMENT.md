@@ -125,7 +125,9 @@ Render log then names the missing setting.
 
 ## 7. Region: keep Render next to the database
 
-The Blueprints put all services in **Singapore**, next to a Supabase project in **Mumbai (ap-south-1)**. Every API
+The production Blueprint puts all services in **Singapore**, next to a Supabase project in **Mumbai (ap-south-1)**. In
+the demo Blueprint the `region:` line is commented out, because the demo was first created in Oregon (Render's default)
+and Render cannot change an existing service's region; uncomment it when you create the demo services from scratch. Every API
 request makes a few database round trips, so distance matters: with Render in Oregon and Supabase in Mumbai, a
 simple request takes about 1 second instead of roughly 0.2 seconds.
 
