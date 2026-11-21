@@ -114,6 +114,18 @@ def production_problems(s: "Settings") -> list[str]:
     return problems
 
 
+def database_url_problem(url: str) -> str | None:
+    """Catch the usual copy-paste mistakes in DATABASE_URL before they surface as a DNS error."""
+    if any(p in url for p in ("<", ">", "[YOUR-PASSWORD]", "YOUR-PASSWORD")):
+        return ("DATABASE_URL still contains a placeholder such as <region> or [YOUR-PASSWORD]. Copy the full URI from "
+                "Supabase -> Connect -> Session pooler and put in your real database password.")
+    rest = url.split("://", 1)[-1].split("/", 1)[0]
+    if rest.count("@") > 1:
+        return ("DATABASE_URL has more than one '@' before the host. If your database password contains '@', write "
+                "it as %40 (and '#' as %23, '/' as %2F, '%' as %25).")
+    return None
+
+
 def _with_scheme(url: str) -> str:
     """Render's fromService 'host' gives a bare hostname; add https:// (http:// for localhost)."""
     out = []
@@ -140,5 +152,7 @@ def get_settings() -> Settings:
             raise RuntimeError(
                 "DATABASE_URL is 'pgserver' (or missing), which only works for local development. Set it to the "
                 "Supabase Session pooler URL (port 5432).") from exc
+    elif problem := database_url_problem(s.database_url):
+        raise RuntimeError(problem)
 
     return s

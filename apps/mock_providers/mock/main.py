@@ -16,8 +16,8 @@ import json
 import random
 import time
 import uuid
-from contextlib import asynccontextmanager
-from datetime import date, datetime, timedelta, timezone
+from contextlib import asynccontextmanager, suppress
+from datetime import date, datetime, timedelta, UTC
 from pathlib import Path
 
 import httpx
@@ -43,6 +43,18 @@ class Settings(BaseSettings):
     max_delay_seconds: float = 8.0
 
 
+def database_url_problem(url: str) -> str | None:
+    """Catch the usual copy-paste mistakes in DATABASE_URL before they surface as a DNS error."""
+    if any(p in url for p in ("<", ">", "[YOUR-PASSWORD]", "YOUR-PASSWORD")):
+        return ("DATABASE_URL still contains a placeholder such as <region> or [YOUR-PASSWORD]. Copy the full URI from "
+                "Supabase -> Connect -> Session pooler and put in your real database password.")
+    rest = url.split("://", 1)[-1].split("/", 1)[0]
+    if rest.count("@") > 1:
+        return ("DATABASE_URL has more than one '@' before the host. If your database password contains '@', write "
+                "it as %40 (and '#' as %23, '/' as %2F, '%' as %25).")
+    return None
+
+
 settings = Settings()
 if settings.database_url == "pgserver":
     try:
@@ -55,6 +67,9 @@ if settings.database_url == "pgserver":
     Path(settings.pgserver_dir).mkdir(parents=True, exist_ok=True)
     settings.database_url = pgserver.get_server(settings.pgserver_dir, cleanup_mode=None).get_uri()
 
+if (problem := database_url_problem(settings.database_url)) and settings.database_url != "pgserver":
+    raise RuntimeError(problem)
+
 url = settings.database_url
 for prefix in ("postgres://", "postgresql://"):
     if url.startswith(prefix):
@@ -66,7 +81,7 @@ TS = DateTime(timezone=True)
 
 
 def now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Base(DeclarativeBase):
@@ -179,10 +194,8 @@ def evaluate(provider: str, data: dict, forced: str) -> tuple[str, str | None, d
         signals.append({"code": "high_risk_category", "weight": 25})
     reg = data.get("gst_registration_date")
     age_days = None
-    try:
+    with suppress(ValueError):
         age_days = (date.today() - date.fromisoformat(reg)).days if reg else None
-    except ValueError:
-        pass
     if age_days is not None and age_days < 180:
         signals.append({"code": "new_gst_registration", "weight": 15})
     s = data.get("signals") or {}

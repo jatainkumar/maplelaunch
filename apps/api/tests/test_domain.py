@@ -198,3 +198,13 @@ def test_model_text_is_made_plain():
 
     out = plain_text("**Reviewer focus:** check the bank \u2013 name differs\n## Next\nRetry in 2\u20138 s")
     assert out == "Reviewer focus: check the bank, name differs\nNext\nRetry in 2-8 s"
+
+
+def test_database_url_copy_paste_mistakes_are_caught():
+    from app.core.config import database_url_problem
+
+    host = "aws-0-ap-south-1.pooler.supabase.com:5432/postgres"
+    assert database_url_problem(f"postgresql://postgres.ref:secret@{host}") is None
+    assert "placeholder" in database_url_problem("postgresql://postgres.ref:secret@aws-0-<region>.pooler.supabase.com")
+    assert "%40" in database_url_problem(f"postgresql://postgres.ref:se@cret@{host}")
+    assert database_url_problem(f"postgresql://postgres.ref:se%40cret@{host}") is None
