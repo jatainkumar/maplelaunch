@@ -73,6 +73,7 @@ export type MerchantDetail = {
   timeline: { at: string; to: string; label: string }[];
   notifications: Notification[];
   can_change_bank: boolean;
+  review: { started_at: string; due_at: string; sla_hours: number } | null;
 };
 
 export type Meta = {

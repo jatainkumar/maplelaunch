@@ -14,6 +14,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 from sqlalchemy import update
 
+from app.core.config import get_settings
 from app.db.models import AgentDecision, Application, InfoRequest, OpsException, ReviewTask, utcnow
 from app.db.session import session_scope
 from app.domain.policy import get_active_policy, required_checks
@@ -237,7 +238,8 @@ async def open_review(state: WF) -> WF:
                          recommendation=recommendation, priority=args.get("priority", "normal")))
         await transition(s, app, S.MANUAL_REVIEW, "agent", "; ".join(reasons)[:500] or "Needs human review")
         await notify(s, app.merchant_user_id, app.id, "Your application is being reviewed",
-                     "A member of our onboarding team is reviewing your application. No action is needed right now.")
+                     "A member of our onboarding team is reviewing your application. You can expect a decision within "
+                     f"{get_settings().review_sla_hours} hours. No action is needed right now.")
     return {"route": ""}
 
 

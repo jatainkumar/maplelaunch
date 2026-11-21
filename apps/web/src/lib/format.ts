@@ -11,6 +11,16 @@ export function ago(iso: string | null | undefined): string {
   return `${Math.round(s / 86400)} d ago`;
 }
 
+// "in about 23 hours", "in 40 min"; null once the moment has passed.
+export function until(iso: string | null | undefined, now: number = Date.now()): string | null {
+  if (!iso) return null;
+  const s = (new Date(iso).getTime() - now) / 1000;
+  if (s <= 0) return null;
+  if (s < 3600) return `in ${Math.max(1, Math.round(s / 60))} min`;
+  const h = Math.round(s / 3600);
+  return h < 48 ? `in about ${h} hour${h === 1 ? "" : "s"}` : `in about ${Math.round(h / 24)} days`;
+}
+
 export function time(iso: string | null | undefined): string {
   if (!iso) return "-";
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });

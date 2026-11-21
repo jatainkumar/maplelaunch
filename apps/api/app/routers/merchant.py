@@ -1,6 +1,7 @@
 """Merchant-facing endpoints: draft → upload (with instant AI autofill) → submit → respond to requests → bank change."""
 
 import asyncio
+from datetime import timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -84,7 +85,17 @@ async def detail(app_id: str, user: User = Depends(current_user)):
         "timeline": r["timeline"],
         "notifications": r["notifications"],
         "can_change_bank": app.status in BANK_CHANGE_ALLOWED,
+        "review": _review_eta(app),
     }
+
+
+def _review_eta(app: Application) -> dict | None:
+    """While a specialist reviews the application, tell the merchant when to expect an answer."""
+    if app.status != S.MANUAL_REVIEW:
+        return None
+    hours = get_settings().review_sla_hours
+    started = app.status_changed_at or app.updated_at
+    return {"started_at": views.iso(started), "due_at": views.iso(started + timedelta(hours=hours)), "sla_hours": hours}
 
 
 class FieldsIn(BaseModel):

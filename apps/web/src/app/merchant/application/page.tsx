@@ -1,10 +1,10 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeft, Bell, Check, CheckCircle2, FileUp, Landmark, Loader2, PartyPopper, Sparkles, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bell, Check, CheckCircle2, FileUp, Hourglass, Landmark, Loader2, PartyPopper, Sparkles, UserCheck, X } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/shell";
@@ -12,7 +12,7 @@ import { StatusBadge } from "@/components/status";
 import { Badge, Button, Card, CardHeader, Input, Label, Modal, PageLoader, Textarea } from "@/components/ui";
 import { WithdrawButton } from "@/components/withdraw";
 import { api, upload } from "@/lib/api";
-import { ago, cn, dateTime, FIELD_LABELS } from "@/lib/format";
+import { ago, cn, dateTime, FIELD_LABELS, until } from "@/lib/format";
 import { IS_DEMO } from "@/lib/mode";
 import type { InfoItem, MerchantDetail, Persona } from "@/lib/types";
 
@@ -22,7 +22,7 @@ const MESSAGES: Record<string, [string, string]> = {
   AWAITING_MERCHANT: ["We need something from you", "Please take a look at the request below so we can continue."],
   VERIFYING: ["Verifying your business", "We're checking your PAN, GST and bank account with our partners. This usually takes under a minute."],
   DECISIONING: ["Almost there", "All checks are in. We're making a decision."],
-  MANUAL_REVIEW: ["A specialist is reviewing your application", "Some details need a human look. No action is needed from you right now."],
+  MANUAL_REVIEW: ["A specialist is reviewing your application", "Some details need a human look. No action is needed from you; we will message you as soon as there is a decision."],
   APPROVED: ["Approved!", "We're creating your merchant ID."],
   PROVISIONING: ["Approved! Setting up your account", "Creating your merchant ID."],
   PROVISIONING_FAILED: ["Approved: merchant ID on its way", "Creating your merchant ID is taking longer than usual. Our team is on it."],
@@ -31,7 +31,7 @@ const MESSAGES: Record<string, [string, string]> = {
   WITHDRAWN: ["Application withdrawn", "This application is closed. You can start a new one any time."],
 };
 
-type StageState = "done" | "current" | "action" | "failed" | "upcoming";
+type StageState = "done" | "current" | "waiting" | "action" | "failed" | "upcoming";
 type Stage = { label: string; state: StageState; note?: string };
 
 // Merchant-facing progress: five plain-language stages instead of the internal checks.
@@ -53,14 +53,14 @@ function stages(d: MerchantDetail): Stage[] {
         ? "done"
         : "upcoming";
   const approval: StageState =
-    s === "REJECTED" ? "failed" : s === "DECISIONING" || s === "MANUAL_REVIEW" ? "current" : past("MANUAL_REVIEW") ? "done" : "upcoming";
+    s === "REJECTED" ? "failed" : s === "MANUAL_REVIEW" ? "waiting" : s === "DECISIONING" ? "current" : past("MANUAL_REVIEW") ? "done" : "upcoming";
   const live: StageState = s === "LIVE" ? "done" : s === "APPROVED" || s === "PROVISIONING" || s === "PROVISIONING_FAILED" ? "current" : "upcoming";
 
   return [
     { label: "Submitted", state: "done" },
     { label: "Documents checked", state: docs, note: waitingOnDocs ? "Action needed" : undefined },
     { label: "Business verified", state: verified, note: waitingAfterChecks || (s === "VERIFYING" && anyCheckFailed) ? "Action needed" : "PAN, GST and bank" },
-    { label: "Approval", state: approval, note: s === "MANUAL_REVIEW" ? "Final checks" : undefined },
+    { label: "Approval", state: approval, note: d.review ? `Specialist review · by ${dateTime(d.review.due_at)}` : undefined },
     { label: "You're live", state: live, note: d.application.mid ?? undefined },
   ];
 }
@@ -70,6 +70,14 @@ function StageDot({ state, n }: { state: StageState; n: number }) {
   if (state === "done") return <span className={cn(base, "bg-emerald-600 text-white")}><Check className="h-4 w-4" /></span>;
   if (state === "failed") return <span className={cn(base, "bg-red-600 text-white")}><X className="h-4 w-4" /></span>;
   if (state === "action") return <span className={cn(base, "bg-amber-500 text-white")}>!</span>;
+  if (state === "waiting")
+    // Waiting on a person, not a machine: a calm amber dot instead of a spinner.
+    return (
+      <span className={cn(base, "bg-amber-400 text-white ring-4 ring-amber-100")}>
+        <span aria-hidden className="absolute inset-0 animate-ping rounded-full bg-amber-300 opacity-40 [animation-duration:2.5s]" />
+        <Hourglass className="relative h-4 w-4" />
+      </span>
+    );
   if (state === "current")
     return (
       <span className={cn(base, "bg-maple-600 text-white ring-4 ring-maple-100")}>
@@ -98,7 +106,7 @@ function Stages({ d }: { d: MerchantDetail }) {
           <span className="min-w-0">
             <span className={cn("block text-sm font-medium", st.state === "upcoming" ? "text-zinc-400" : "text-zinc-900")}>{st.label}</span>
             {st.note && (
-              <span className={cn("block text-xs", st.state === "action" ? "font-medium text-amber-700" : st.label === "You're live" ? "font-mono text-emerald-700" : "text-zinc-500")}>
+              <span className={cn("block text-xs", st.state === "action" || st.state === "waiting" ? "font-medium text-amber-700" : st.label === "You're live" ? "font-mono text-emerald-700" : "text-zinc-500")}>
                 {st.note}
               </span>
             )}
@@ -106,6 +114,44 @@ function Stages({ d }: { d: MerchantDetail }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+// Shown while a person reviews the application: who it is waiting on and when to expect an answer.
+function ReviewWait({ review }: { review: NonNullable<MerchantDetail["review"]> }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000); // the countdown is in minutes and hours
+    return () => clearInterval(t);
+  }, []);
+  const start = new Date(review.started_at).getTime();
+  const due = new Date(review.due_at).getTime();
+  const elapsed = Math.min(1, Math.max(0.03, (now - start) / (due - start)));
+  const left = until(review.due_at, now);
+  return (
+    <div className="mt-5 flex items-start gap-4 rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+      <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-400 text-white ring-4 ring-amber-100">
+        <UserCheck className="h-5 w-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="font-medium text-amber-900">Waiting for a human approval</div>
+        {left ? (
+          <div className="text-sm text-amber-800">
+            Expected by <span className="font-semibold">{dateTime(review.due_at)}</span> ({left}). Reviews are completed within{" "}
+            {review.sla_hours} hours.
+          </div>
+        ) : (
+          <div className="text-sm text-amber-800">This is taking a little longer than usual. Our team is on it and will message you soon.</div>
+        )}
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-amber-100" aria-hidden>
+          <div className="h-full rounded-full bg-amber-400 transition-[width] duration-700" style={{ width: `${elapsed * 100}%` }} />
+        </div>
+        <div className="mt-1 flex flex-wrap justify-between gap-x-3 text-xs text-amber-700/80">
+          <span>With a specialist since {dateTime(review.started_at)}</span>
+          <span>{review.sla_hours} h window</span>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -359,6 +405,7 @@ function Status() {
               <WithdrawButton appId={a.id} status={a.status} onDone={refresh} />
             </div>
           </div>
+          {d.review && <ReviewWait review={d.review} />}
           {a.mid && (
             <div className="mt-5 inline-flex items-center gap-3 rounded-lg border border-emerald-200 bg-white px-4 py-2">
               <span className="text-xs uppercase tracking-wide text-zinc-400">Merchant ID</span>
