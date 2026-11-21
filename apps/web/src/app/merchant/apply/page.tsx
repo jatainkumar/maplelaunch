@@ -293,6 +293,9 @@ function Wizard() {
     try {
       await api(`/applications/${id}/submit`, { method: "POST", json: { consent } });
       toast.success("Application submitted. Verification has started");
+      // The status page shares this cache entry; drop the draft copy so it never flashes "Draft".
+      qc.removeQueries({ queryKey: ["app", id] });
+      qc.invalidateQueries({ queryKey: ["my-apps"] });
       router.replace(`/merchant/application/?id=${id}`);
     } catch (e) {
       toast.error((e as Error).message);

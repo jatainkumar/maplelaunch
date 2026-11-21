@@ -7,6 +7,7 @@ services:
   - type: web
     name: maplelaunch-prod-api
     runtime: python
+    region: singapore   # next to Supabase Mumbai (ap-south-1) and to users in India
     plan: free
     rootDir: apps/api
     buildCommand: pip install -r requirements.txt
@@ -66,6 +67,7 @@ services:
   - type: web
     name: maplelaunch-prod-providers
     runtime: python
+    region: singapore   # next to Supabase Mumbai (ap-south-1) and to users in India
     plan: free
     rootDir: apps/mock_providers
     buildCommand: pip install -r requirements.txt
@@ -85,6 +87,7 @@ services:
   - type: web
     name: maplelaunch-prod-web
     runtime: static
+    region: singapore   # next to Supabase Mumbai (ap-south-1) and to users in India
     rootDir: apps/web
     buildCommand: npm ci && npm run build
     staticPublishPath: out

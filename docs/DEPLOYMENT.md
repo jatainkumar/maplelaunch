@@ -123,18 +123,31 @@ If the service names were already taken on Render, your URLs get a suffix. Use t
 Production refuses to start if any secret is still a development default or the encryption keys are missing. The
 Render log then names the missing setting.
 
-## 7. Keep the demo awake (optional)
+## 7. Region: keep Render next to the database
+
+The Blueprints put all services in **Singapore**, next to a Supabase project in **Mumbai (ap-south-1)**. Every API
+request makes a few database round trips, so distance matters: with Render in Oregon and Supabase in Mumbai, a
+simple request takes about 1 second instead of roughly 0.2 seconds.
+
+If your Supabase project is in another region, change `region:` in the Blueprint to the closest Render region
+(`oregon`, `ohio`, `virginia`, `frankfurt` or `singapore`). Render cannot move an existing service: to change the
+region, delete the three services and apply the Blueprint again (same names, so the URLs stay the same). The secrets
+are regenerated, so also clear the old data (Scenario lab → **Reset demo data** before deleting, or a fresh Supabase
+project).
+
+## 8. Keep the demo awake (optional)
 
 Free Render web services sleep after about 15 minutes without traffic, and the first request after that takes 30 to
-60 seconds. The repository includes `.github/workflows/keepalive.yml`, which pings the API every 10 minutes during
-daytime hours (India time).
+60 seconds. The repository includes `.github/workflows/keepalive.yml`, which pings the API every 10 minutes from
+08:30 to 20:30 IST; while awake, the API keeps the provider service warm. That fits two services inside Render's
+750 free instance-hours a month.
 
 GitHub → repository → **Settings → Secrets and variables → Actions → Variables** → **New repository variable**:
 `API_URL` = `https://maplelaunch-api.onrender.com`.
 
 Also note that Supabase pauses free projects after 7 days without activity; the keepalive pings prevent that too.
 
-## 8. Day-2 operations
+## 9. Day-2 operations
 
 * **Reset the demo:** sign in as the demo admin → Scenario lab → **Reset demo data**. It deletes all applications
   and restores the default policy (as a new version, so the history stays). Users are kept.
@@ -146,7 +159,7 @@ Also note that Supabase pauses free projects after 7 days without activity; the 
 * **Logs:** Render → service → **Logs**. Logs are structured JSON, and PAN, GSTIN, account numbers and emails are
   redacted.
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Symptom | Likely cause and fix |
 |---|---|
@@ -157,6 +170,7 @@ Also note that Supabase pauses free projects after 7 days without activity; the 
 | Port 6543 in `DATABASE_URL` | That is the transaction pooler, which breaks per-application locking. Use the Session pooler (port 5432). |
 | `Refusing to start in production mode: ...` | A production secret is missing or still a dev default. Set the named variable. |
 | Sign-in says `Incorrect email or password` for demo accounts | The API couldn't create users: check `SUPABASE_SERVICE_ROLE_KEY` is the **secret** key, not the publishable one. |
+| Every page feels slow (about 1 s per click) | Render and Supabase are far apart. See section 7. |
 | Web app loads but every request fails | The API is still waking up (wait a minute), or `WEB_ORIGIN` doesn't match the site URL (CORS). Redeploy the API after renaming services. |
 | Documents show "We couldn't read this automatically" | Every LLM provider failed or hit its quota. Check the keys; the application still continues and routes to a human. |
 | Checks stay *Requested* for a long time | The provider service was asleep. It retries webhook delivery; the timeout job then retries the check. |
