@@ -1,5 +1,7 @@
 """Response builders shared by merchant and ops endpoints. PII is masked unless reveal=True."""
 
+import re
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -92,6 +94,41 @@ async def documents_view(session: AsyncSession, app_id: str, reveal: bool, inclu
     return out
 
 
+PRETTY_KEYS = {"legal_name", "trade_name", "account_holder_name", "contact_name", "address", "city", "state",
+               "bank_name"}
+_SMALL_WORDS = {"of", "and", "the", "for", "in", "at", "on", "to", "by"}
+_KEEP_UPPER = {"ICICI", "HDFC", "SBI", "IDFC", "IDBI", "PNB", "UCO", "AU", "RBL", "LLP", "HUF", "MG", "NH", "UPI"}
+
+
+def _cap(word: str) -> str:
+    lower = word.lower()
+    if lower[:1].isdigit():  # 5TH -> 5th, 560034 stays
+        return lower
+    for i, ch in enumerate(lower):
+        if ch.isalpha():
+            return lower[:i] + ch.upper() + lower[i + 1:]
+    return lower
+
+
+def pretty_text(value: str) -> str:
+    """Documents are often printed in capitals; show names and addresses in normal case.
+
+    'KUMAR CHAI CORNER' -> 'Kumar Chai Corner', '14, 5TH CROSS, MG ROAD' -> '14, 5th Cross, MG Road'. Values that
+    already use mixed case are left alone, and well-known acronyms (ICICI, HDFC, MG, LLP) stay in capitals."""
+    if not value or not value.isupper():
+        return value
+    words = []
+    for i, word in enumerate(value.split()):
+        letters = re.sub(r"[^A-Za-z]", "", word)
+        if letters in _KEEP_UPPER:
+            words.append(word)
+        elif i > 0 and letters.lower() in _SMALL_WORDS:
+            words.append(word.lower())
+        else:
+            words.append(_cap(word))
+    return " ".join(words)
+
+
 async def autofill(session: AsyncSession, app_id: str) -> dict:
     docs = list((await session.execute(select(Document).where(Document.application_id == app_id,
                                                               Document.is_active))).scalars())
@@ -105,8 +142,8 @@ async def autofill(session: AsyncSession, app_id: str) -> dict:
         value = extraction_value(e.fields, name)
         conf = (e.fields.get(name) or {}).get("confidence", 0)
         if value and (key not in out or conf > out[key]["confidence"]):
-            if key in ("legal_name", "trade_name", "account_holder_name"):
-                value = value.title() if value.isupper() else value
+            if key in PRETTY_KEYS:
+                value = pretty_text(value)
             out[key] = {"value": value, "confidence": conf, "source": DOC_TYPES[slot]["label"]}
     return out
 

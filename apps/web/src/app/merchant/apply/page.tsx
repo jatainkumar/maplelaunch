@@ -11,7 +11,7 @@ import { WithdrawButton } from "@/components/withdraw";
 import { ConfidenceBadge } from "@/components/status";
 import { Badge, Button, Card, Input, Label, PageLoader, Select } from "@/components/ui";
 import { API_URL, api, upload } from "@/lib/api";
-import { cn, FIELD_LABELS } from "@/lib/format";
+import { cn, FIELD_LABELS, prettyValue } from "@/lib/format";
 import { IS_DEMO } from "@/lib/mode";
 import type { AppSummary, Doc, MerchantDetail, Meta, Persona } from "@/lib/types";
 
@@ -87,18 +87,19 @@ function FieldRow({ name, form, setForm, detail, type = "text" }: { name: string
 function DocSlot({ slot, meta, doc, uploading, onFile }: { slot: string; meta: Meta; doc?: Doc; uploading: boolean; onFile: (f: File) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const ext = doc?.extraction;
+  const reading = !!doc && !ext && !uploading; // uploaded, AI still reading it in the background
   const q = ext?.quality;
   const bad = ext?.error || (q && (q.legible === false || (q.score ?? 1) < 0.6)) || (doc?.detected_type && doc.detected_type !== slot);
   return (
     <Card className={cn("overflow-hidden", bad && "border-amber-300")}>
       <div className="flex items-center gap-4 p-4">
         <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-lg", doc ? (bad ? "bg-amber-50 text-amber-600" : "bg-emerald-50 text-emerald-600") : "bg-zinc-100 text-zinc-400")}>
-          {uploading ? <Loader2 className="h-5 w-5 animate-spin" /> : doc ? bad ? <AlertTriangle className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" /> : <FileUp className="h-5 w-5" />}
+          {uploading || reading ? <Loader2 className="h-5 w-5 animate-spin" /> : doc ? bad ? <AlertTriangle className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" /> : <FileUp className="h-5 w-5" />}
         </div>
         <div className="min-w-0 flex-1">
           <div className="font-medium text-zinc-900">{meta.documents[slot]?.label}</div>
           <div className="truncate text-sm text-zinc-500">
-            {uploading ? "Reading the document with AI…" : doc ? doc.filename : meta.documents[slot]?.hint}
+            {uploading ? "Uploading…" : reading ? `${doc.filename} · reading with AI…` : doc ? doc.filename : meta.documents[slot]?.hint}
           </div>
         </div>
         <input
@@ -127,10 +128,10 @@ function DocSlot({ slot, meta, doc, uploading, onFile }: { slot: string; meta: M
               )}
               <div className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
                 {Object.entries(ext.fields).map(([k, f]) => (
-                  <div key={k} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="text-zinc-500">{FIELD_LABELS[k] ?? k}</span>
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span className="truncate font-medium text-zinc-800">{f.value ?? "-"}</span>
+                  <div key={k} className="flex items-start justify-between gap-3 text-sm">
+                    <span className="min-w-0 text-zinc-500">{FIELD_LABELS[k] ?? k}</span>
+                    <span className="flex min-w-0 items-start justify-end gap-2 text-right">
+                      <span className="font-medium text-zinc-800 [overflow-wrap:anywhere]">{prettyValue(k, f.value)}</span>
                       {f.value && <ConfidenceBadge value={f.confidence} />}
                     </span>
                   </div>
@@ -167,6 +168,7 @@ function Wizard() {
     queryKey: ["app", id],
     queryFn: () => api<MerchantDetail>(`/applications/${id}`),
     enabled: !!id,
+    refetchInterval: (q) => (q.state.data?.documents.some((x) => !x.extraction) ? 1500 : false),
   });
   const d = detail.data;
 
@@ -192,13 +194,21 @@ function Wizard() {
   const allDocs = required.every((s) => docsBySlot[s]);
   const matchingPersonas = (personas.data ?? []).filter((p) => p.business_type === d?.application.business_type);
 
-  function applyAutofill(autofill: MerchantDetail["autofill"]) {
+  // Documents are read in the background; whenever new values arrive, fill the fields that are still empty.
+  useEffect(() => {
+    if (!d || !initialised.current) return;
     setForm((f) => {
+      let changed = false;
       const n = { ...f };
-      for (const [k, af] of Object.entries(autofill)) if (!n[k]) n[k] = String(af.value);
-      return n;
+      for (const [k, af] of Object.entries(d.autofill)) {
+        if (!n[k]) {
+          n[k] = String(af.value);
+          changed = true;
+        }
+      }
+      return changed ? n : f;
     });
-  }
+  }, [d]);
 
   async function create() {
     setBusy(true);
@@ -219,10 +229,8 @@ function Wizard() {
       const fd = new FormData();
       fd.append("slot", slot);
       fd.append("file", file);
-      const r = await upload<{ autofill: MerchantDetail["autofill"]; extraction_error: string | null }>(`/applications/${id}/documents`, fd);
-      applyAutofill(r.autofill);
+      await upload(`/applications/${id}/documents`, fd);
       await qc.invalidateQueries({ queryKey: ["app", id] });
-      if (r.extraction_error) toast.warning("Uploaded, but we couldn't read it automatically.");
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -233,12 +241,15 @@ function Wizard() {
   async function useSamples() {
     const p = matchingPersonas.find((x) => x.key === persona);
     if (!p) return;
-    for (const [slot, filename] of Object.entries(p.files)) {
-      if (!required.includes(slot)) continue;
-      const res = await fetch(`${API_URL}/demo/samples/${p.key}/${filename}`);
-      const blob = await res.blob();
-      await uploadFile(slot, new File([blob], filename, { type: blob.type }));
-    }
+    await Promise.all(
+      Object.entries(p.files)
+        .filter(([slot]) => required.includes(slot))
+        .map(async ([slot, filename]) => {
+          const res = await fetch(`${API_URL}/demo/samples/${p.key}/${filename}`);
+          const blob = await res.blob();
+          await uploadFile(slot, new File([blob], filename, { type: blob.type }));
+        }),
+    );
     // Fields that aren't on any document (contact details, volume) come from the persona.
     setForm((f) => {
       const n = { ...f };

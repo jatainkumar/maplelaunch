@@ -28,8 +28,8 @@ type Overview = {
 };
 
 const FILTERS = [
+  { key: "all", label: "All applications" },
   { key: "attention", label: "Needs attention" },
-  { key: "all", label: "All" },
   { key: "MANUAL_REVIEW", label: "In review" },
   { key: "SUBMITTED,PROCESSING_DOCUMENTS,VERIFYING,DECISIONING", label: "In progress" },
   { key: "AWAITING_MERCHANT", label: "Waiting on merchant" },
@@ -64,14 +64,13 @@ function Queue() {
   });
   const o = overview.data;
   const list = (rows.data ?? []).filter((r) => !q || `${r.reference} ${r.legal_name} ${r.trade_name}`.toLowerCase().includes(q.toLowerCase()));
-  const live = o?.by_status?.LIVE ?? 0;
   const total = o ? Object.entries(o.by_status).filter(([k]) => k !== "DRAFT").reduce((s, [, v]) => s + v, 0) : 0;
 
   return (
     <>
       <PageTitle
         title="Onboarding queue"
-        subtitle="Everything the platform couldn't finish on its own, plus a live view of the rest."
+        subtitle="Every application received. Open any of them to review its documents, checks and history."
         action={
           IS_DEMO && (
             <Link href="/admin/lab/">
@@ -82,13 +81,9 @@ function Queue() {
           )
         }
       />
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6">
-        <Stat label="Applications" value={total} hint={`${live} live`} />
-        <Stat label="Open reviews" value={o?.open_reviews ?? "-"} />
-        <Stat label="Open exceptions" value={o?.open_exceptions ?? "-"} hint={o?.exception_rate != null ? `${Math.round(o.exception_rate * 100)}% of apps hit one` : undefined} />
-        <Stat label="Auto-decided" value={o?.auto_approval_rate != null ? `${Math.round(o.auto_approval_rate * 100)}%` : "-"} hint={o ? `${o.auto_decided} of ${o.decided}` : undefined} />
-        <Stat label="Time to decision" value={duration(o?.median_minutes_to_decision)} hint="median" />
-        <Stat label="Callbacks absorbed" value={(o?.duplicate_callbacks_ignored ?? 0) + (o?.late_callbacks ?? 0)} hint="duplicate or late" />
+      <div className="mb-6 grid max-w-2xl grid-cols-2 gap-3">
+        <Stat label="Applications received" value={o ? total : "-"} />
+        <Stat label="Reviews pending" value={o?.open_reviews ?? "-"} />
       </div>
 
       <Card>

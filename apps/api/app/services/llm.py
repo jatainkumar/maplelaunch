@@ -18,7 +18,7 @@ from app.core.logging import log
 settings = get_settings()
 
 # Free tiers have tight per-minute limits; keep concurrency low.
-_semaphore = asyncio.Semaphore(2)
+_semaphore = asyncio.Semaphore(4)
 
 
 class LLMUnavailable(Exception):

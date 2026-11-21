@@ -228,3 +228,13 @@ def test_render_service_names_become_public_urls():
     assert _with_scheme("maplelaunch-web.onrender.com") == "https://maplelaunch-web.onrender.com"
     assert _with_scheme("localhost:3000") == "http://localhost:3000"
     assert _with_scheme("https://example.com/") == "https://example.com"
+
+
+def test_extracted_capitals_are_made_readable():
+    from app.routers.views import pretty_text
+
+    assert pretty_text("KUMAR CHAI CORNER") == "Kumar Chai Corner"
+    assert pretty_text("14, 5TH CROSS, MG ROAD 560034") == "14, 5th Cross, MG Road 560034"
+    assert pretty_text("STATE BANK OF INDIA") == "State Bank of India"
+    assert pretty_text("ICICI BANK") == "ICICI Bank"
+    assert pretty_text("Ravi Kumar") == "Ravi Kumar"

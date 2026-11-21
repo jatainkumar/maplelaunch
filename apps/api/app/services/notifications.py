@@ -30,20 +30,25 @@ async def send_email_job(session: AsyncSession, payload: dict) -> None:
     if user is None:
         n.email_status = "skipped"
         return
+    recipient = user.email
+    to = settings.email_redirect_to.strip() or recipient
+    redirected = to != recipient
     body_html = (
         "<div style='font-family:Inter,Arial,sans-serif;max-width:520px'>"
         "<p style='color:#D9480F;font-weight:600'>MapleLaunch</p>"
         f"<h2 style='color:#18181B'>{html.escape(n.title)}</h2>"
         f"<p style='color:#3F3F46;white-space:pre-line'>{html.escape(n.body)}</p>"
-        f"<p><a href='{settings.cors_origins[0]}/merchant' style='color:#D9480F'>Open your application</a></p>"
+        f"<p><a href='{settings.cors_origins[0]}/merchant/' style='color:#D9480F'>Open your application</a></p>"
         + ("<p style='color:#A1A1AA;font-size:12px'>Demo environment: synthetic data only.</p>" if settings.is_demo
            else "")
+        + (f"<p style='color:#A1A1AA;font-size:12px'>Delivered to you on behalf of {html.escape(recipient)}.</p>"
+           if redirected else "")
         + "</div>"
     )
     async with httpx.AsyncClient(timeout=15) as c:
         r = await c.post("https://api.resend.com/emails",
                          headers={"Authorization": f"Bearer {settings.resend_api_key}"},
-                         json={"from": settings.email_from, "to": [user.email], "subject": n.title, "html": body_html})
+                         json={"from": settings.email_from, "to": [to], "subject": n.title, "html": body_html})
     if r.status_code >= 400:
         # Resend's free tier only delivers to the account owner's address without a verified domain.
         log.warning("email_failed", status=r.status_code, body=r.text[:200])

@@ -64,3 +64,41 @@ export const FIELD_LABELS: Record<string, string> = {
   execution_date: "Executed on",
   bank: "Bank details",
 };
+
+// ---- Displaying values read from documents ----------------------------------------------------------------------
+const DATE_FIELDS = new Set(["date_of_birth", "registration_date", "incorporation_date", "execution_date"]);
+const ID_FIELDS = new Set(["pan_number", "pan", "gstin", "ifsc", "cin", "account_number"]);
+const SMALL_WORDS = new Set(["of", "and", "the", "for", "in", "at", "on", "to", "by"]);
+const KEEP_UPPER = new Set(["ICICI", "HDFC", "SBI", "IDFC", "IDBI", "PNB", "UCO", "AU", "RBL", "LLP", "HUF", "MG", "NH", "UPI"]);
+
+function capWord(word: string): string {
+  const lower = word.toLowerCase();
+  if (/^\d/.test(lower)) return lower; // 5TH -> 5th
+  return lower.replace(/[a-z]/, (c) => c.toUpperCase());
+}
+
+/** 'KUMAR CHAI CORNER' -> 'Kumar Chai Corner'. Mixed-case text and well-known acronyms are left alone. */
+export function prettyText(value: string): string {
+  if (!value || value !== value.toUpperCase() || !/[A-Z]/.test(value)) return value;
+  return value
+    .split(/\s+/)
+    .map((w, i) => {
+      const letters = w.replace(/[^A-Za-z]/g, "");
+      if (KEEP_UPPER.has(letters)) return w;
+      if (i > 0 && SMALL_WORDS.has(letters.toLowerCase())) return w.toLowerCase();
+      return capWord(w);
+    })
+    .join(" ");
+}
+
+/** Format an extracted value for display: readable dates, IDs in capitals, names and addresses in normal case. */
+export function prettyValue(field: string, value: unknown): string {
+  if (value === null || value === undefined || value === "") return "-";
+  const v = String(value);
+  if (ID_FIELDS.has(field)) return v.toUpperCase();
+  if (DATE_FIELDS.has(field) && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    const d = new Date(`${v}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  }
+  return prettyText(v);
+}

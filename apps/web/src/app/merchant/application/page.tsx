@@ -1,14 +1,14 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeft, Bell, CheckCircle2, FileUp, Landmark, PartyPopper, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bell, Check, CheckCircle2, FileUp, Landmark, Loader2, PartyPopper, Sparkles, X } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/shell";
-import { CheckIcon, StatusBadge } from "@/components/status";
+import { StatusBadge } from "@/components/status";
 import { Badge, Button, Card, CardHeader, Input, Label, Modal, PageLoader, Textarea } from "@/components/ui";
 import { WithdrawButton } from "@/components/withdraw";
 import { api, upload } from "@/lib/api";
@@ -31,35 +31,82 @@ const MESSAGES: Record<string, [string, string]> = {
   WITHDRAWN: ["Application withdrawn", "This application is closed. You can start a new one any time."],
 };
 
-type Step = { label: string; state: string; note?: string };
+type StageState = "done" | "current" | "action" | "failed" | "upcoming";
+type Stage = { label: string; state: StageState; note?: string };
 
-function steps(d: MerchantDetail): Step[] {
+// Merchant-facing progress: five plain-language stages instead of the internal checks.
+function stages(d: MerchantDetail): Stage[] {
   const s = d.application.status;
-  const checks = Object.fromEntries(d.checks.map((c) => [c.type, c]));
-  const docsState =
-    s === "PROCESSING_DOCUMENTS" || s === "SUBMITTED" ? "PENDING"
-      : s === "AWAITING_MERCHANT" && d.open_request?.items.some((i) => i.kind !== "field") && !d.checks.length ? "WAITING"
-        : "PASSED";
-  const checkStep = (type: string, label: string): Step => {
-    const c = checks[type];
-    if (!c) return { label, state: "NONE" };
-    return { label, state: c.status, note: c.attempt > 1 ? `attempt ${c.attempt}` : undefined };
-  };
-  const decision =
-    ["APPROVED", "PROVISIONING", "PROVISIONING_FAILED", "LIVE"].includes(s) ? "PASSED"
-      : s === "REJECTED" ? "FAILED"
-        : s === "MANUAL_REVIEW" || s === "DECISIONING" ? "PENDING"
-          : "NONE";
-  const mid = s === "LIVE" ? "PASSED" : s === "PROVISIONING" ? "PENDING" : s === "PROVISIONING_FAILED" ? "WAITING" : "NONE";
+  const order = ["SUBMITTED", "PROCESSING_DOCUMENTS", "VERIFYING", "DECISIONING", "MANUAL_REVIEW", "APPROVED", "PROVISIONING", "PROVISIONING_FAILED", "LIVE"];
+  const at = order.indexOf(s);
+  const past = (status: string) => at > order.indexOf(status);
+  const anyCheckFailed = d.checks.some((c) => c.status === "FAILED" || c.status === "TIMED_OUT" || c.status === "ERROR");
+  const waitingOnDocs = s === "AWAITING_MERCHANT" && !d.checks.length;
+  const waitingAfterChecks = s === "AWAITING_MERCHANT" && d.checks.length > 0;
+
+  const docs: StageState = waitingOnDocs ? "action" : s === "SUBMITTED" || s === "PROCESSING_DOCUMENTS" ? "current" : "done";
+  const verified: StageState = waitingAfterChecks
+    ? "action"
+    : s === "VERIFYING"
+      ? "current"
+      : past("VERIFYING") || s === "REJECTED"
+        ? "done"
+        : "upcoming";
+  const approval: StageState =
+    s === "REJECTED" ? "failed" : s === "DECISIONING" || s === "MANUAL_REVIEW" ? "current" : past("MANUAL_REVIEW") ? "done" : "upcoming";
+  const live: StageState = s === "LIVE" ? "done" : s === "APPROVED" || s === "PROVISIONING" || s === "PROVISIONING_FAILED" ? "current" : "upcoming";
+
   return [
-    { label: "Documents read", state: docsState },
-    checkStep("PAN", "PAN verified"),
-    checkStep("GST", "GST verified"),
-    checkStep("BANK", "Bank account confirmed"),
-    checkStep("RISK", "Risk assessment"),
-    { label: s === "MANUAL_REVIEW" ? "Human review" : "Decision", state: decision },
-    { label: "Merchant ID", state: mid, note: d.application.mid ?? undefined },
+    { label: "Submitted", state: "done" },
+    { label: "Documents checked", state: docs, note: waitingOnDocs ? "Action needed" : undefined },
+    { label: "Business verified", state: verified, note: waitingAfterChecks || (s === "VERIFYING" && anyCheckFailed) ? "Action needed" : "PAN, GST and bank" },
+    { label: "Approval", state: approval, note: s === "MANUAL_REVIEW" ? "Final checks" : undefined },
+    { label: "You're live", state: live, note: d.application.mid ?? undefined },
   ];
+}
+
+function StageDot({ state, n }: { state: StageState; n: number }) {
+  const base = "relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold";
+  if (state === "done") return <span className={cn(base, "bg-emerald-600 text-white")}><Check className="h-4 w-4" /></span>;
+  if (state === "failed") return <span className={cn(base, "bg-red-600 text-white")}><X className="h-4 w-4" /></span>;
+  if (state === "action") return <span className={cn(base, "bg-amber-500 text-white")}>!</span>;
+  if (state === "current")
+    return (
+      <span className={cn(base, "bg-maple-600 text-white ring-4 ring-maple-100")}>
+        <Loader2 className="h-4 w-4 animate-spin" />
+      </span>
+    );
+  return <span className={cn(base, "border-2 border-zinc-200 bg-white text-zinc-400")}>{n}</span>;
+}
+
+function Stages({ d }: { d: MerchantDetail }) {
+  const list = stages(d);
+  return (
+    <ol className="flex flex-col gap-4 border-t border-zinc-100 px-6 py-5 sm:flex-row sm:gap-0">
+      {list.map((st, i) => (
+        <li key={st.label} className="relative flex items-center gap-3 sm:flex-1 sm:flex-col sm:gap-2 sm:text-center">
+          {i < list.length - 1 && (
+            <span
+              aria-hidden
+              className={cn(
+                "absolute hidden h-0.5 sm:left-1/2 sm:top-4 sm:block sm:w-full",
+                st.state === "done" ? "bg-emerald-500" : "bg-zinc-200",
+              )}
+            />
+          )}
+          <StageDot state={st.state} n={i + 1} />
+          <span className="min-w-0">
+            <span className={cn("block text-sm font-medium", st.state === "upcoming" ? "text-zinc-400" : "text-zinc-900")}>{st.label}</span>
+            {st.note && (
+              <span className={cn("block text-xs", st.state === "action" ? "font-medium text-amber-700" : st.label === "You're live" ? "font-mono text-emerald-700" : "text-zinc-500")}>
+                {st.note}
+              </span>
+            )}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
 }
 
 function RequestCard({ d, onDone }: { d: MerchantDetail; onDone: () => void }) {
@@ -319,15 +366,7 @@ function Status() {
             </div>
           )}
         </div>
-        <ol className="grid grid-cols-2 gap-px border-t border-zinc-100 bg-zinc-100 sm:grid-cols-4 lg:grid-cols-7">
-          {steps(d).map((s) => (
-            <li key={s.label} className="flex flex-col items-center gap-2 bg-white px-2 py-4 text-center max-sm:last:col-span-2">
-              <CheckIcon status={s.state} />
-              <span className={cn("text-xs font-medium", s.state === "NONE" ? "text-zinc-400" : "text-zinc-700")}>{s.label}</span>
-              {s.note && <span className="font-mono text-[11px] text-zinc-400">{s.note}</span>}
-            </li>
-          ))}
-        </ol>
+        <Stages d={d} />
       </Card>
 
       {d.open_request && a.status === "AWAITING_MERCHANT" && <RequestCard key={d.open_request.id} d={d} onDone={refresh} />}

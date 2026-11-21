@@ -9,7 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.security import actor, current_user
+from app.core.security import DEMO_USERS, actor, current_user
 from app.db.models import (Application, Document, InfoRequest, Notification, OpsException, ReviewTask, User,
                            utcnow)
 from app.db.session import get_session, session_scope
@@ -21,7 +21,7 @@ from app.routers import views
 from app.services import checks as checks_svc
 from app.services.applications import app_data, new_reference, set_fields
 from app.services.audit import audit
-from app.services.documents import ALLOWED_MIME, MAX_BYTES, run_extraction, save_document
+from app.services.documents import ALLOWED_MIME, MAX_BYTES, save_document
 from app.services.storage import storage
 
 router = APIRouter(prefix="/applications", tags=["merchant"])
@@ -130,12 +130,13 @@ async def upload(app_id: str, slot: str = Form(...), file: UploadFile = File(...
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "File is larger than 8 MB")
     doc = await save_document(s, app.id, slot, file.filename or slot, mime, data, actor(user))
-    await s.commit()  # keep the upload even if extraction is slow or fails
-    ext = await run_extraction(s, doc, actor(user))
+    # Read it in the background so the merchant never waits; the wizard polls and fills the form as results arrive.
+    await enqueue(s, "extract_document", {"document_id": doc.id, "actor": actor(user)}, application_id=app.id,
+                  dedupe_key=f"extract:{doc.id}", max_attempts=3)
+    await s.commit()
     return {
         "document": next(d for d in await views.documents_view(s, app.id, reveal=True) if d["id"] == doc.id),
         "autofill": await views.autofill(s, app.id),
-        "extraction_error": ext.error,
     }
 
 
@@ -322,6 +323,10 @@ async def get_meta(s: AsyncSession = Depends(get_session)):
         "high_risk_categories": policy.get("high_risk_categories", []),
         "status_labels": {k.value: lbl for k, lbl in LABELS.items()}, "policy_version": version,
         "mode": get_settings().app_mode,
+        # Demo build only: the sign-in page offers these accounts and fills in their credentials.
+        "demo_accounts": [{"role": u["role"], "name": u["name"], "email": u["email"],
+                           "password": get_settings().demo_password} for u in DEMO_USERS]
+        if get_settings().is_demo else [],
     }
 
 

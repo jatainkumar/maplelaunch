@@ -82,6 +82,7 @@ export type Meta = {
   required_documents: Record<string, string[]>;
   high_risk_categories: string[];
   status_labels: Record<string, string>;
+  demo_accounts?: { role: "merchant" | "operator" | "admin"; name: string; email: string; password: string }[];
   policy_version: number;
 };
 

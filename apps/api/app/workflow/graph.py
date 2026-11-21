@@ -14,7 +14,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 from sqlalchemy import update
 
-from app.db.models import AgentDecision, Application, Document, InfoRequest, OpsException, ReviewTask, utcnow
+from app.db.models import AgentDecision, Application, InfoRequest, OpsException, ReviewTask, utcnow
 from app.db.session import session_scope
 from app.domain.policy import get_active_policy, required_checks
 from app.domain.states import CHECK_IN_FLIGHT, C, S, transition
@@ -24,7 +24,7 @@ from app.services import providers
 from app.services.applications import active_documents, latest_extraction
 from app.services.audit import audit
 from app.services.dedupe import find_duplicates
-from app.services.documents import run_extraction
+from app.services.documents import ensure_extracted
 from app.services.notifications import notify
 from app.services.validation import info_items_from_issues, validate_application
 from app.workflow import agent
@@ -57,9 +57,9 @@ async def extract(state: WF) -> WF:
         if app.status in (S.SUBMITTED, S.AWAITING_MERCHANT):
             await transition(s, app, S.PROCESSING_DOCUMENTS, "system", "Reading and validating documents")
         pending = [d.id for d in await active_documents(s, app_id) if await latest_extraction(s, d.id) is None]
-    for doc_id in pending:  # one short transaction per document (LLM calls are slow)
-        async with session_scope() as s:
-            await run_extraction(s, await s.get(Document, doc_id))
+    # All unread documents in parallel, each in its own short transaction (LLM calls are slow). Documents already
+    # being read by a background job are waited for, not read twice.
+    await asyncio.gather(*(ensure_extracted(doc_id) for doc_id in pending))
     return {"route": ""}
 
 

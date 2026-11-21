@@ -1,12 +1,19 @@
-"""Upload + extraction persistence. Sensitive extracted values are encrypted before they touch the database."""
+"""Upload + extraction persistence. Sensitive extracted values are encrypted before they touch the database.
 
+Uploads return immediately; documents are read in the background (one durable job per document, so several
+documents are read in parallel). A per-document claim makes sure each document is read once, even when the
+workflow reaches its extraction step while a background read is still running."""
+
+import asyncio
 import hashlib
+import time
 
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import encrypt, mask
 from app.db.models import Document, Extraction
+from app.db.session import session_scope
 from app.domain.policy import SENSITIVE_FIELDS
 from app.services.audit import audit
 from app.services.extraction import PROMPT_VERSION, extract_document
@@ -55,3 +62,30 @@ async def run_extraction(session: AsyncSession, doc: Document, actor: str = "sys
                 {"slot": doc.slot, "model": outcome.model, "quality": doc.quality, "error": outcome.error,
                  "fields": {k: v.get("confidence") for k, v in outcome.fields.items()}})
     return ext
+
+
+async def _claim(doc_id: str) -> bool:
+    """Atomically mark an unread, active document as being read. Returns True for exactly one caller."""
+    async with session_scope() as s:
+        r = await s.execute(update(Document).where(Document.id == doc_id, Document.is_active,
+                                                   Document.status == "uploaded").values(status="extracting"))
+        return r.rowcount == 1
+
+
+async def ensure_extracted(doc_id: str, actor: str = "system", wait_seconds: float = 120) -> None:
+    """Read the document if nobody else is; otherwise wait for the other reader (and take over if it died)."""
+    if await _claim(doc_id):
+        async with session_scope() as s:
+            await run_extraction(s, await s.get(Document, doc_id), actor)
+        return
+    deadline = time.monotonic() + wait_seconds
+    while time.monotonic() < deadline:
+        async with session_scope() as s:
+            doc = await s.get(Document, doc_id)
+            if doc is None or not doc.is_active or doc.status in ("extracted", "failed"):
+                return
+        await asyncio.sleep(1)
+    async with session_scope() as s:  # the other reader never finished (e.g. a restart): read it here
+        doc = await s.get(Document, doc_id)
+        if doc is not None and doc.is_active and doc.status in ("uploaded", "extracting"):
+            await run_extraction(s, doc, actor)

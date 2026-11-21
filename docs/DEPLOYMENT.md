@@ -69,8 +69,10 @@ offline sample reader and the rules engine, but uploaded real documents can't be
 ## 4. Optional: Resend for email
 
 [resend.com](https://resend.com) → *API Keys* → create a key (`re_...`). Without a verified domain, Resend only
-delivers to the email address you signed up with, so emails to the demo accounts (`@example.com`) are skipped and
-recorded as failed in the notification log. The in-app inbox always works.
+delivers to the email address your Resend account was created with. The demo accounts use `@example.com` addresses,
+so the demo Blueprint sets `EMAIL_REDIRECT_TO` to the owner's address: every notification email is delivered there,
+with a line naming the account it was meant for. Change that value in `render.yaml` to your own Resend address. The
+in-app inbox always works, with or without email.
 
 ## 5. Deploy the demo on Render
 

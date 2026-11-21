@@ -14,7 +14,7 @@ import { AppShell } from "@/components/shell";
 import { CheckBadge, CheckIcon, ConfidenceBadge, RiskBadge, StatusBadge } from "@/components/status";
 import { Badge, Button, Card, CardHeader, Empty, Input, Label, Modal, PageLoader, Tabs, Textarea } from "@/components/ui";
 import { api } from "@/lib/api";
-import { ago, cn, dateTime, FIELD_LABELS, humanize, time } from "@/lib/format";
+import { ago, cn, dateTime, FIELD_LABELS, humanize, prettyValue, time } from "@/lib/format";
 import type { Doc, OpsDetail } from "@/lib/types";
 
 const WAITING: Record<string, string> = {
@@ -123,7 +123,7 @@ function DocViewer({ appId, doc, onClose }: { appId: string; doc: Doc | null; on
                 <div key={k} className="flex items-center justify-between gap-2 border-b border-zinc-100 pb-1.5 text-sm">
                   <span className="text-zinc-500">{FIELD_LABELS[k] ?? k}</span>
                   <span className="flex items-center gap-2">
-                    <span className="font-medium">{f.value ?? "-"}</span>
+                    <span className="break-words text-right font-medium">{prettyValue(k, f.value)}</span>
                     {f.value && <ConfidenceBadge value={f.confidence} />}
                   </span>
                 </div>

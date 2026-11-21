@@ -60,6 +60,9 @@ class Settings(BaseSettings):
     # Email (Resend). Empty key = in-app inbox only.
     resend_api_key: str = ""
     email_from: str = "MapleLaunch <onboarding@resend.dev>"
+    # Resend's free plan only delivers to the account owner's address until a domain is verified. When set, every
+    # notification email goes here instead (the original recipient is named in the email).
+    email_redirect_to: str = ""
 
     # Worker
     worker_enabled: bool = True
