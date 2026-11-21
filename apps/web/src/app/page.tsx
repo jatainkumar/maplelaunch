@@ -34,11 +34,11 @@ export default function Landing() {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
 
-  async function go(role: User["role"]) {
+  async function go(role: User["role"], to?: string) {
     setBusy(role);
     try {
       const u = await demo(role);
-      router.push(homeFor(u.role));
+      router.push(to ?? homeFor(u.role));
     } catch (e) {
       toast.error((e as Error).message);
       setBusy(null);
@@ -77,7 +77,7 @@ export default function Landing() {
           {IS_DEMO ? (
             <>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Button size="lg" onClick={() => go("merchant")} loading={busy === "merchant"}>
+                <Button size="lg" onClick={() => go("merchant", "/merchant/apply/")} loading={busy === "merchant"}>
                   <Store className="h-4 w-4" /> Apply as a merchant
                 </Button>
                 <Button size="lg" variant="outline" onClick={() => go("operator")} loading={busy === "operator"}>
@@ -148,7 +148,7 @@ export default function Landing() {
         </div>
       </section>
       <footer className="border-t border-zinc-200 py-8 text-center text-xs text-zinc-400">
-        {IS_DEMO ? "MapleLaunch · demo environment · all merchants, documents and providers are synthetic" : "MapleLaunch · autonomous merchant onboarding"}
+        MapleLaunch · Jatain Kumar · IIT KGP
       </footer>
     </div>
   );

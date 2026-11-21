@@ -1,6 +1,14 @@
 const RAW_API = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
 // Render's blueprint passes a bare hostname; add the scheme if it's missing.
-export const API_URL = RAW_API.includes("://") ? RAW_API : `https://${RAW_API}`;
+// Render's Blueprint passes the API's internal service name (e.g. "maplelaunch-api"); the browser needs the public
+// https://<name>.onrender.com address. A full hostname just gets https://.
+function publicUrl(raw: string): string {
+  if (raw.includes("://")) return raw;
+  const host = raw.split(":")[0];
+  if (host.startsWith("localhost") || host.startsWith("127.")) return `http://${raw}`;
+  return host.includes(".") ? `https://${raw}` : `https://${host}.onrender.com`;
+}
+export const API_URL = publicUrl(RAW_API);
 
 const TOKEN_KEY = "maplelaunch.token";
 const USER_KEY = "maplelaunch.user";

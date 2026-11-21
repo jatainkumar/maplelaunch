@@ -219,3 +219,12 @@ def test_supabase_settings_are_checked_at_startup():
     assert any("publishable" in p for p in supabase_problems(Settings(**base, supabase_service_role_key="sb_publishable_abc")))
     assert supabase_problems(Settings(**base, supabase_service_role_key="sb_secret_xyz")) == []
     assert supabase_problems(Settings(_env_file=None, auth_mode="local", storage_mode="local")) == []
+
+
+def test_render_service_names_become_public_urls():
+    from app.core.config import _with_scheme
+
+    assert _with_scheme("maplelaunch-api") == "https://maplelaunch-api.onrender.com"
+    assert _with_scheme("maplelaunch-web.onrender.com") == "https://maplelaunch-web.onrender.com"
+    assert _with_scheme("localhost:3000") == "http://localhost:3000"
+    assert _with_scheme("https://example.com/") == "https://example.com"

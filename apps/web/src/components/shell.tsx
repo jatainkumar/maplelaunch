@@ -39,13 +39,13 @@ export function AppShell({ roles, children, wide }: { roles: User["role"][]; chi
           <Link href={user.role === "merchant" ? "/merchant/" : "/ops/"}>
             <Logo />
           </Link>
-          <nav className="hidden items-center gap-1 md:flex">
+          <nav className="hidden items-center gap-1 lg:flex">
             {NAV.filter((n) => n.roles.includes(user.role)).map((n) => (
               <Link
                 key={n.href}
                 href={n.href}
                 className={cn(
-                  "flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                  "flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
                   pathname.startsWith(n.href.replace(/\/$/, "")) ? "bg-zinc-100 text-zinc-900" : "text-zinc-500 hover:text-zinc-900",
                 )}
               >
@@ -55,8 +55,8 @@ export function AppShell({ roles, children, wide }: { roles: User["role"][]; chi
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-3">
-            <div className="hidden text-right sm:block">
-              <div className="text-sm font-medium leading-tight text-zinc-900">{user.name || user.email}</div>
+            <div className="hidden min-w-0 text-right sm:block">
+              <div className="max-w-[14rem] truncate text-sm font-medium leading-tight text-zinc-900">{user.name || user.email}</div>
               <div className="flex items-center justify-end gap-1 text-xs capitalize text-zinc-500">
                 {user.role !== "merchant" && <ShieldCheck className="h-3 w-3" />}
                 {user.role}
@@ -74,9 +74,17 @@ export function AppShell({ roles, children, wide }: { roles: User["role"][]; chi
             </button>
           </div>
         </div>
-        <nav className="flex gap-1 overflow-x-auto border-t border-zinc-100 px-4 py-1 md:hidden">
+        <nav className="flex gap-1 overflow-x-auto border-t border-zinc-100 px-4 py-1.5 sm:px-6 lg:hidden">
           {NAV.filter((n) => n.roles.includes(user.role)).map((n) => (
-            <Link key={n.href} href={n.href} className="whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium text-zinc-600">
+            <Link
+              key={n.href}
+              href={n.href}
+              className={cn(
+                "flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 text-xs font-medium",
+                pathname.startsWith(n.href.replace(/\/$/, "")) ? "bg-zinc-100 text-zinc-900" : "text-zinc-500",
+              )}
+            >
+              {n.icon}
               {n.label}
             </Link>
           ))}

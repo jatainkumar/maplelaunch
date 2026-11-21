@@ -145,12 +145,21 @@ def database_url_problem(url: str) -> str | None:
 
 
 def _with_scheme(url: str) -> str:
-    """Render's fromService 'host' gives a bare hostname; add https:// (http:// for localhost)."""
+    """Turn what Render's Blueprint `fromService: host` gives into a public URL.
+
+    Render passes the service's internal name (e.g. "maplelaunch-api"). Free services can't use Render's private
+    network, so a bare name becomes its public address https://<name>.onrender.com. A hostname with a dot just gets
+    https:// (http:// for localhost)."""
     out = []
     for part in url.split(","):
         part = part.strip().rstrip("/")
         if part and "://" not in part:
-            part = ("http://" if part.startswith(("localhost", "127.")) else "https://") + part
+            if part.startswith(("localhost", "127.")):
+                part = "http://" + part
+            elif "." not in part.split(":")[0]:
+                part = f"https://{part.split(':')[0]}.onrender.com"
+            else:
+                part = "https://" + part
         out.append(part)
     return ",".join(out)
 

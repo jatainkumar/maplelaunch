@@ -209,7 +209,7 @@ Step-by-step instructions, checks and troubleshooting: **[docs/DEPLOYMENT.md](do
 4. **Render, production (optional):** *New → Blueprint* → same repo, Blueprint path `render.production.yaml`, with
    the second Supabase project plus `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 5. Optional: set the repository variable `API_URL` to enable `.github/workflows/keepalive.yml`, which avoids cold
-   starts during demo hours.
+   starts during the day (08:30 to 20:30 IST).
 
 Free-tier notes: Render web services sleep after ~15 min idle (first request ~30-60 s; the UI says it's waking up,
 and providers retry webhook delivery). Supabase pauses projects after 7 days without activity. Resend delivers only

@@ -1,10 +1,11 @@
-# Render free web services sleep after ~15 min idle. During demo days, this pings the API every
-# 10 minutes between 09:00 and 23:00 IST so reviewers don't hit a cold start.
+# Render free web services sleep after ~15 min idle. This pings the API every 10 minutes between 08:30 and 20:30
+# IST so reviewers don't hit a cold start; while awake, the API keeps the provider service warm too. Twelve hours a
+# day for two services stays inside Render's 750 free instance-hours per month.
 # Set the repository variable API_URL (e.g. https://maplelaunch-api.onrender.com) to enable it.
 name: Keep demo warm
 on:
   schedule:
-    - cron: "*/10 3-17 * * *"
+    - cron: "*/10 3-14 * * *"
   workflow_dispatch:
 
 jobs:

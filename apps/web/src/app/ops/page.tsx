@@ -82,7 +82,7 @@ function Queue() {
           )
         }
       />
-      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 2xl:grid-cols-6">
         <Stat label="Applications" value={total} hint={`${live} live`} />
         <Stat label="Open reviews" value={o?.open_reviews ?? "-"} />
         <Stat label="Open exceptions" value={o?.open_exceptions ?? "-"} hint={o?.exception_rate != null ? `${Math.round(o.exception_rate * 100)}% of apps hit one` : undefined} />
@@ -92,11 +92,11 @@ function Queue() {
       </div>
 
       <Card>
-        <div className="flex flex-wrap items-center gap-3 px-4 pt-3">
+        <div className="flex flex-col gap-3 px-4 pt-3 xl:flex-row xl:items-center">
           <div className="min-w-0 flex-1">
             <Tabs tabs={FILTERS.map((f) => ({ key: f.key, label: f.label }))} value={filter} onChange={setFilter} />
           </div>
-          <div className="relative w-full sm:w-64">
+          <div className="relative w-full xl:w-64">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
             <Input placeholder="Search name or reference" className="pl-9" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>

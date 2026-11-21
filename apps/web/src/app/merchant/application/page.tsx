@@ -301,14 +301,14 @@ function Status() {
               <StatusBadge status={a.status} label={a.status_label} />
             </div>
           </div>
-          <div className="mt-5 flex items-start gap-3">
-            {a.status === "LIVE" && <PartyPopper className="mt-0.5 h-5 w-5 text-emerald-600" />}
-            <div>
+          <div className="mt-5 flex flex-col items-start gap-3 sm:flex-row">
+            {a.status === "LIVE" && <PartyPopper className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />}
+            <div className="min-w-0 flex-1">
               <div className="font-medium text-zinc-900">{title}</div>
               <div className="text-sm text-zinc-600">{sub}</div>
               {a.status === "REJECTED" && a.decision_reason && <div className="mt-2 text-sm text-red-700">Reason: {a.decision_reason}</div>}
             </div>
-            <div className="ml-auto">
+            <div className="-ml-3 sm:ml-auto">
               <WithdrawButton appId={a.id} status={a.status} onDone={refresh} />
             </div>
           </div>
@@ -321,7 +321,7 @@ function Status() {
         </div>
         <ol className="grid grid-cols-2 gap-px border-t border-zinc-100 bg-zinc-100 sm:grid-cols-4 lg:grid-cols-7">
           {steps(d).map((s) => (
-            <li key={s.label} className="flex flex-col items-center gap-2 bg-white px-2 py-4 text-center">
+            <li key={s.label} className="flex flex-col items-center gap-2 bg-white px-2 py-4 text-center max-sm:last:col-span-2">
               <CheckIcon status={s.state} />
               <span className={cn("text-xs font-medium", s.state === "NONE" ? "text-zinc-400" : "text-zinc-700")}>{s.label}</span>
               {s.note && <span className="font-mono text-[11px] text-zinc-400">{s.note}</span>}

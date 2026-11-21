@@ -21,9 +21,10 @@
 }
 
 /* Slightly larger default scale: every Tailwind size is rem-based, so this zooms the whole UI evenly. */
-html { color-scheme: light; font-size: 112.5%; }
-@media (min-width: 48rem) { html { font-size: 118.75%; } }
-@media (min-width: 80rem) { html { font-size: 125%; } }
+html { color-scheme: light; font-size: 106.25%; }
+@media (min-width: 48rem) and (min-height: 32rem) { html { font-size: 112.5%; } }
+@media (min-width: 64rem) and (min-height: 32rem) { html { font-size: 118.75%; } }
+@media (min-width: 80rem) and (min-height: 32rem) { html { font-size: 125%; } }
 body { background: #fafaf9; color: #18181b; }
 
 :focus-visible { outline: 2px solid var(--color-maple-500); outline-offset: 2px; }

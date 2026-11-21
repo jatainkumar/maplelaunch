@@ -1,5 +1,7 @@
 """MapleLaunch API: autonomous merchant onboarding (FastAPI + LangGraph)."""
 
+import asyncio
+import contextlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -36,11 +38,27 @@ async def lifespan(_: FastAPI):
     await runner.init_workflow()
     if settings.worker_enabled:
         await worker.start()
+    warmer = asyncio.create_task(_keep_providers_warm())
     log.info("startup_complete", mode=settings.app_mode, env=settings.env, auth=settings.auth_mode, storage=settings.storage_mode,
              llm=settings.llm_enabled)
     yield
+    warmer.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await warmer
     await worker.stop()
     await runner.close_workflow()
+
+
+async def _keep_providers_warm() -> None:
+    """On free hosting the provider service sleeps on its own. While the API is awake, ping it so verification
+    requests and the scenario lab don't wait for its cold start."""
+    import httpx
+
+    while True:
+        with contextlib.suppress(Exception):
+            async with httpx.AsyncClient(timeout=90) as c:
+                await c.get(f"{settings.providers_base_url}/healthz")
+        await asyncio.sleep(600)
 
 
 app = FastAPI(title="MapleLaunch API", version="1.0.0", lifespan=lifespan)
