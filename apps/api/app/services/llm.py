@@ -72,6 +72,12 @@ def _candidates(kind: str) -> list[tuple[str, object]]:
     return out
 
 
+def _blocked(exc: Exception) -> bool:
+    """401/403: bad key, or the provider refuses this network (e.g. Groq blocks VPN and hosting IPs)."""
+    text = f"{type(exc).__name__} {exc}"
+    return any(k in text for k in ("Error code: 401", "Error code: 403", "PermissionDenied", "Access denied"))
+
+
 def _rate_limited(exc: Exception) -> bool:
     text = f"{type(exc).__name__} {exc}"
     return any(k in text for k in ("429", "RESOURCE_EXHAUSTED", "RateLimit", "rate_limit", "quota"))
@@ -104,7 +110,13 @@ async def invoke(messages: list, kind: str = "text", tools: list | None = None,
             result = LLMResult(content=content, model=label, latency_ms=int((time.perf_counter() - started) * 1000),
                                message=msg)
         except Exception as exc:  # rate limit, outage, bad request -> try the next model
-            if _rate_limited(exc):
+            if _blocked(exc) and "Access denied" in str(exc):
+                # A network-level block applies to every key of this provider: skip all of them for a while.
+                provider = label.split(":")[0] + ":"
+                for other, _ in candidates:
+                    if other.startswith(provider):
+                        _cooldown[other] = time.monotonic() + COOLDOWN_SECONDS
+            elif _rate_limited(exc) or _blocked(exc):
                 _cooldown[label] = time.monotonic() + COOLDOWN_SECONDS
             log.warning("llm_provider_failed", provider=label, error=str(exc)[:300])
             errors.append(f"{label}: {type(exc).__name__}")

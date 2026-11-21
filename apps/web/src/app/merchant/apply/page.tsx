@@ -269,25 +269,31 @@ function Wizard() {
       body[k] = k === "monthly_volume" ? Number(String(form[k]).replace(/[^\d]/g, "")) || 0 : form[k];
     }
     await api(`/applications/${id}`, { method: "PATCH", json: body });
-    await qc.invalidateQueries({ queryKey: ["app", id] });
+    void qc.invalidateQueries({ queryKey: ["app", id] }); // refresh in the background
   }
 
-  async function next(fields: string[]) {
+  // Moving to the next step never waits for the network: the step changes at once and the answers are saved in
+  // the background (in order). If the server rejects them, the merchant is taken back to fix them; Submit waits for
+  // any pending save first.
+  const pendingSave = useRef<Promise<void>>(Promise.resolve());
+
+  function next(fields: string[]) {
     const missing = fields.filter((k) => REQUIRED.has(k) && !form[k]);
     if (d?.application.business_type === "private_limited" && fields.includes("cin") && !form.cin) missing.push("cin");
     if (missing.length) {
       toast.error(`Please fill in: ${missing.map((m) => FIELD_LABELS[m] ?? m).join(", ")}`);
       return;
     }
-    setBusy(true);
-    try {
-      await save(fields);
-      setStep((s) => s + 1);
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
+    const from = step;
+    setStep(from + 1);
+    pendingSave.current = pendingSave.current
+      .catch(() => undefined)
+      .then(() => save(fields))
+      .catch((e) => {
+        toast.error((e as Error).message);
+        setStep(from);
+        throw e;
+      });
   }
 
   async function checkIfsc(code: string) {
@@ -301,6 +307,12 @@ function Wizard() {
 
   async function submit() {
     setBusy(true);
+    try {
+      await pendingSave.current; // make sure the last step's answers are saved
+    } catch {
+      setBusy(false); // already reported, and the merchant was taken back to that step
+      return;
+    }
     try {
       await api(`/applications/${id}/submit`, { method: "POST", json: { consent } });
       toast.success("Application submitted. Verification has started");

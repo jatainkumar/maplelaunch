@@ -1,5 +1,6 @@
 """Operator console: queue, application detail, human decisions, PII reveal, exceptions."""
 
+import asyncio
 from datetime import datetime
 from typing import Literal
 
@@ -20,7 +21,7 @@ from app.db.models import (
     User,
     utcnow,
 )
-from app.db.session import get_session
+from app.db.session import ReadSession, get_session, read_parallel
 from app.domain.states import CHECK_IN_FLIGHT, TERMINAL, S
 from app.jobs.queue import enqueue
 from app.routers import views
@@ -38,20 +39,33 @@ def _minutes(a: datetime | None, b: datetime | None) -> float | None:
 
 
 @router.get("/overview")
-async def overview(user: User = Depends(staff), s: AsyncSession = Depends(get_session)):
-    by_status = dict((await s.execute(select(Application.status, func.count()).group_by(Application.status))).all())
-    open_exc = (await s.execute(select(func.count()).select_from(OpsException)
-                                .where(OpsException.status == "open"))).scalar()
-    open_reviews = (await s.execute(select(func.count()).select_from(ReviewTask)
-                                    .where(ReviewTask.status == "open"))).scalar()
-    decided = list((await s.execute(select(Application).where(Application.decided_at.is_not(None)))).scalars())
+async def overview(user: User = Depends(staff)):
+    def scalar(stmt):
+        async def run(s: AsyncSession):
+            return (await s.execute(stmt)).scalar()
+        return run
+
+    async def status_counts(s: AsyncSession) -> dict:
+        return dict((await s.execute(select(Application.status, func.count()).group_by(Application.status))).all())
+
+    async def decided_apps(s: AsyncSession) -> list:
+        return list((await s.execute(select(Application).where(Application.decided_at.is_not(None)))).scalars())
+
+    r = await read_parallel(  # polled by the queue page: all counts in one round trip
+        by_status=status_counts,
+        open_exc=scalar(select(func.count()).select_from(OpsException).where(OpsException.status == "open")),
+        open_reviews=scalar(select(func.count()).select_from(ReviewTask).where(ReviewTask.status == "open")),
+        decided=decided_apps,
+        dup_callbacks=scalar(select(func.coalesce(func.sum(CallbackEvent.duplicate_count), 0))),
+        late=scalar(select(func.count()).select_from(CallbackEvent)
+                    .where(CallbackEvent.outcome.in_(["late_accepted", "stale_superseded"]))),
+        with_exceptions=scalar(select(func.count(func.distinct(OpsException.application_id)))),
+    )
+    by_status, open_exc, open_reviews, decided = r["by_status"], r["open_exc"], r["open_reviews"], r["decided"]
+    dup_callbacks, late, with_exceptions = r["dup_callbacks"], r["late"], r["with_exceptions"]
     auto = sum(1 for a in decided if a.decided_by in ("agent", "rules-engine"))
     times = [m for a in decided if (m := _minutes(a.submitted_at, a.decided_at)) is not None]
-    dup_callbacks = (await s.execute(select(func.coalesce(func.sum(CallbackEvent.duplicate_count), 0)))).scalar()
-    late = (await s.execute(select(func.count()).select_from(CallbackEvent)
-                            .where(CallbackEvent.outcome.in_(["late_accepted", "stale_superseded"])))).scalar()
     submitted = sum(c for st, c in by_status.items() if st not in ("DRAFT",))
-    with_exceptions = (await s.execute(select(func.count(func.distinct(OpsException.application_id))))).scalar()
     return {
         "by_status": by_status, "open_exceptions": open_exc, "open_reviews": open_reviews,
         "decided": len(decided), "auto_decided": auto,
@@ -64,19 +78,25 @@ async def overview(user: User = Depends(staff), s: AsyncSession = Depends(get_se
 
 @router.get("/applications")
 async def queue(status: str | None = None, q: str | None = None, attention: bool = False,
-                user: User = Depends(staff), s: AsyncSession = Depends(get_session)):
+                user: User = Depends(staff)):
     stmt = select(Application).where(Application.status != S.DRAFT).order_by(Application.updated_at.desc()).limit(200)
     if status:
         stmt = stmt.where(Application.status.in_(status.split(",")))
-    apps = list((await s.execute(stmt)).scalars())
+    async with ReadSession() as rs:
+        apps = list((await rs.execute(stmt)).scalars())
     ids = [a.id for a in apps]
-    exc = dict((await s.execute(select(OpsException.application_id, func.count()).where(
-        OpsException.application_id.in_(ids), OpsException.status == "open").group_by(OpsException.application_id))).all())
-    reviews = {r.application_id: r for r in (await s.execute(select(ReviewTask).where(
-        ReviewTask.application_id.in_(ids), ReviewTask.status == "open"))).scalars()}
-    dups = dict((await s.execute(select(DuplicateMatch.application_id, func.count()).where(
-        DuplicateMatch.application_id.in_(ids), DuplicateMatch.status == "open")
-        .group_by(DuplicateMatch.application_id))).all())
+
+    async def counts(model, s: AsyncSession) -> dict:
+        return dict((await s.execute(select(model.application_id, func.count()).where(
+            model.application_id.in_(ids), model.status == "open").group_by(model.application_id))).all())
+
+    async def open_reviews(s: AsyncSession) -> dict:
+        return {r.application_id: r for r in (await s.execute(select(ReviewTask).where(
+            ReviewTask.application_id.in_(ids), ReviewTask.status == "open"))).scalars()}
+
+    r = await read_parallel(exc=lambda s: counts(OpsException, s), dups=lambda s: counts(DuplicateMatch, s),
+                            reviews=open_reviews)
+    exc, dups, reviews = r["exc"], r["dups"], r["reviews"]
     out = []
     now = utcnow()
     for a in apps:
@@ -97,17 +117,28 @@ async def queue(status: str | None = None, q: str | None = None, attention: bool
 
 
 @router.get("/applications/{app_id}")
-async def detail(app_id: str, user: User = Depends(staff), s: AsyncSession = Depends(get_session)):
-    app = await s.get(Application, app_id)
+async def detail(app_id: str, user: User = Depends(staff)):
+    async with ReadSession() as rs:
+        app = await rs.get(Application, app_id)
     if app is None:
         raise HTTPException(404, "Not found")
-    out = await views.ops_detail(s, app)
-    out["audit_chain"] = await verify_chain(s, app_id)
-    try:
+
+    async def chain() -> dict:
+        async with ReadSession() as rs:
+            return await verify_chain(rs, app_id)
+
+    async def waiting() -> str | None:
         # A closed (withdrawn / rejected) application is not waiting for anyone, whatever the checkpoint says.
-        out["waiting_for"] = None if S(app.status) in TERMINAL else await runner.waiting_for(app_id)
-    except Exception:
-        out["waiting_for"] = None
+        if S(app.status) in TERMINAL:
+            return None
+        try:
+            return await runner.waiting_for(app_id)
+        except Exception:
+            return None
+
+    out, audit_chain, waiting_for = await asyncio.gather(views.ops_detail(app), chain(), waiting())
+    out["audit_chain"] = audit_chain
+    out["waiting_for"] = waiting_for
     return out
 
 

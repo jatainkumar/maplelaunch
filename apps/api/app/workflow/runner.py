@@ -36,7 +36,7 @@ _graph = None
 
 async def init_workflow() -> None:
     global _pool, _graph
-    _pool = AsyncConnectionPool(settings.psycopg_url, min_size=1, max_size=5, open=False,
+    _pool = AsyncConnectionPool(settings.psycopg_url, min_size=1, max_size=3, open=False,
                                 kwargs={"autocommit": True, "prepare_threshold": None, "row_factory": dict_row})
     await _pool.open()
     saver = AsyncPostgresSaver(_pool)

@@ -74,7 +74,7 @@ url = settings.database_url
 for prefix in ("postgres://", "postgresql://"):
     if url.startswith(prefix):
         url = "postgresql+psycopg://" + url[len(prefix):]
-engine = create_async_engine(url, pool_size=3, pool_pre_ping=True, connect_args={"prepare_threshold": None})
+engine = create_async_engine(url, pool_size=2, max_overflow=1, pool_recycle=240, connect_args={"prepare_threshold": None})
 Session = async_sessionmaker(engine, expire_on_commit=False)
 J = JSON().with_variant(JSONB(), "postgresql")
 TS = DateTime(timezone=True)

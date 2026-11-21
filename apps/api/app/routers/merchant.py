@@ -12,7 +12,7 @@ from app.core.config import get_settings
 from app.core.security import DEMO_USERS, actor, current_user
 from app.db.models import (Application, Document, InfoRequest, Notification, OpsException, ReviewTask, User,
                            utcnow)
-from app.db.session import get_session, session_scope
+from app.db.session import ReadSession, get_session, read_parallel, session_scope
 from app.domain import validators as v
 from app.domain.policy import BUSINESS_TYPES, CATEGORIES, DOC_TYPES, get_active_policy, required_documents
 from app.domain.states import BANK_CHANGE_ALLOWED, MERCHANT_WITHDRAWABLE, S, transition
@@ -60,21 +60,29 @@ async def list_mine(user: User = Depends(current_user), s: AsyncSession = Depend
 
 
 @router.get("/{app_id}")
-async def detail(app_id: str, user: User = Depends(current_user), s: AsyncSession = Depends(get_session)):
-    app = await own_app(s, app_id, user)
-    _, policy = await get_active_policy(s)
-    open_request = next((r for r in await views.info_requests_view(s, app.id) if r["status"] == "open"), None)
+async def detail(app_id: str, user: User = Depends(current_user)):
+    async with ReadSession() as rs:
+        app = await own_app(rs, app_id, user)
+    r = await read_parallel(  # independent lookups at the same time (this page is polled)
+        policy=get_active_policy,
+        requests=lambda s: views.info_requests_view(s, app.id),
+        data=lambda s: app_data(s, app, reveal=True),  # the merchant sees their own data
+        documents=lambda s: views.documents_view(s, app.id, reveal=True),
+        autofill=lambda s: views.autofill(s, app.id),
+        checks=lambda s: views.checks_view(s, app.id, all_attempts=False),
+        timeline=lambda s: views.merchant_timeline(s, app.id),
+        notifications=lambda s: views.notifications_view(s, user.id, app.id),
+    )
     return {
         "application": views.app_summary(app),
-        "data": await app_data(s, app, reveal=True),  # the merchant sees their own data
-        "required_documents": required_documents(policy, app.business_type),
-        "documents": await views.documents_view(s, app.id, reveal=True),
-        "autofill": await views.autofill(s, app.id),
-        "checks": [{"type": c["type"], "status": c["status"], "attempt": c["attempt"]}
-                   for c in await views.checks_view(s, app.id, all_attempts=False)],
-        "open_request": open_request,
-        "timeline": await views.merchant_timeline(s, app.id),
-        "notifications": await views.notifications_view(s, user.id, app.id),
+        "data": r["data"],
+        "required_documents": required_documents(r["policy"][1], app.business_type),
+        "documents": r["documents"],
+        "autofill": r["autofill"],
+        "checks": [{"type": c["type"], "status": c["status"], "attempt": c["attempt"]} for c in r["checks"]],
+        "open_request": next((x for x in r["requests"] if x["status"] == "open"), None),
+        "timeline": r["timeline"],
+        "notifications": r["notifications"],
         "can_change_bank": app.status in BANK_CHANGE_ALLOWED,
     }
 

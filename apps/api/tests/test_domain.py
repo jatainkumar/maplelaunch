@@ -238,3 +238,34 @@ def test_extracted_capitals_are_made_readable():
     assert pretty_text("STATE BANK OF INDIA") == "State Bank of India"
     assert pretty_text("ICICI BANK") == "ICICI Bank"
     assert pretty_text("Ravi Kumar") == "Ravi Kumar"
+
+
+async def test_network_block_skips_every_key_of_that_provider(monkeypatch):
+    from langchain_core.messages import AIMessage
+
+    from app.services import llm
+
+    calls = []
+
+    class Blocked:
+        def __init__(self, name):
+            self.name = name
+
+        async def ainvoke(self, _):
+            calls.append(self.name)
+            raise RuntimeError("Error code: 403 - {'error': {'message': 'Access denied. Please check your network settings.'}}")
+
+    class Works:
+        async def ainvoke(self, _):
+            calls.append("gemini")
+            return AIMessage(content="ok")
+
+    monkeypatch.setattr(llm, "_candidates", lambda kind: [("groq:m#1", lambda: Blocked("groq#1")),
+                                                         ("groq:m#2", lambda: Blocked("groq#2")),
+                                                         ("gemini:x", Works)])
+    llm._cooldown.clear()
+    try:
+        result = await llm.invoke([], kind="text")
+        assert result.content == "ok" and calls == ["groq#1", "gemini"]  # groq#2 was never tried
+    finally:
+        llm._cooldown.clear()

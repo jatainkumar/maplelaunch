@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowRight, Bot, CheckCircle2, FileSearch, Fingerprint, Loader2, Radio, ShieldCheck, Store, UserCheck } from "lucide-react";
+import { ArrowRight, Bot, FileSearch, Fingerprint, Radio, ShieldCheck, Store, UserCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { HeroDemo } from "@/components/hero-demo";
 import { Logo } from "@/components/logo";
 import { homeFor, useAuth } from "@/components/providers";
 import { Button } from "@/components/ui";
@@ -19,14 +20,6 @@ const FEATURES = [
   { icon: <UserCheck className="h-5 w-5" />, title: "Humans where it matters", body: "Risky, uncertain or duplicate cases go to reviewers with an AI briefing, side-by-side evidence and one-click actions." },
   { icon: <Fingerprint className="h-5 w-5" />, title: "Private by design", body: "Identifiers are encrypted at rest, masked everywhere, and every reveal is audited in a tamper-evident log." },
   { icon: <ShieldCheck className="h-5 w-5" />, title: "Durable workflow", body: "A LangGraph state machine with Postgres checkpoints survives restarts, retries and provider outages." },
-];
-
-const STEPS = [
-  ["Documents read", "PASSED"],
-  ["PAN verified", "PASSED"],
-  ["GST verified", "PASSED"],
-  ["Bank penny-drop", "PENDING"],
-  ["Risk assessment", "PENDING"],
 ];
 
 export default function Landing() {
@@ -108,32 +101,7 @@ export default function Landing() {
           )}
         </div>
 
-        <div className="animate-fade-in rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl shadow-zinc-200/50">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-zinc-400">ML-7Q2KXP</div>
-              <div className="mt-1 font-semibold text-zinc-900">Kumar Chai Corner</div>
-            </div>
-            <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 ring-1 ring-sky-200">Verifying</span>
-          </div>
-          <ol className="mt-6 space-y-4">
-            {STEPS.map(([label, s]) => (
-              <li key={label} className="flex items-center gap-3">
-                {s === "PASSED" ? (
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                ) : (
-                  <Loader2 className="h-5 w-5 animate-spin text-sky-500" />
-                )}
-                <span className="text-sm text-zinc-700">{label}</span>
-                <span className="ml-auto text-xs text-zinc-400">{s === "PASSED" ? "callback received" : "waiting for provider"}</span>
-              </li>
-            ))}
-          </ol>
-          <div className="mt-6 rounded-lg bg-zinc-50 p-3 text-xs leading-relaxed text-zinc-600">
-            <span className="font-medium text-zinc-800">Agent:</span> PAN and GST passed. Waiting for the penny-drop and
-            risk callbacks before deciding. Auto-approval allowed if risk ≤ 30.
-          </div>
-        </div>
+        <HeroDemo />
       </section>
 
       <section className="border-t border-zinc-200 bg-white">

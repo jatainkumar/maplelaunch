@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     groq_api_keys: str = ""  # optional extra keys (comma-separated), used in turn when one is rate-limited
     groq_vision_model: str = "qwen/qwen3.8-27b"
     groq_text_model: str = "openai/gpt-oss-120b"
-    llm_timeout_seconds: float = 45.0
+    llm_timeout_seconds: float = 25.0  # a document read normally takes 3-10 s; give up early and fall back
     llm_order: str = "groq,gemini"  # provider order; the next one is used on errors, rate limits or bad reads
 
     # Mock providers

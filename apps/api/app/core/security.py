@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.db.models import User
-from app.db.session import get_session
+from app.db.session import ReadSession, get_session
 
 settings = get_settings()
 bearer = HTTPBearer(auto_error=False)
@@ -166,6 +166,11 @@ async def _ensure_users(session: AsyncSession, users: list[dict], password: str)
     await session.flush()
 
 
+# Signed-in users are looked up once a minute at most; roles change rarely and every lookup is a database round trip.
+USER_CACHE_SECONDS = 60
+_user_cache: dict[str, tuple[User, float]] = {}
+
+
 async def current_user(creds: HTTPAuthorizationCredentials | None = Depends(bearer),
                        session: AsyncSession = Depends(get_session)) -> User:
     if creds is None:
@@ -177,7 +182,14 @@ async def current_user(creds: HTTPAuthorizationCredentials | None = Depends(bear
             claims = jwt.decode(creds.credentials, settings.app_secret, algorithms=["HS256"], issuer="maplelaunch-local")
     except jwt.PyJWTError:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session expired, please sign in again") from None
-    user = await session.get(User, claims["sub"])
+    cached = _user_cache.get(claims["sub"])
+    if cached and cached[1] > time.monotonic():
+        return cached[0]
+    async with ReadSession() as rs:  # autocommit lookup: one round trip, no transaction
+        user = await rs.get(User, claims["sub"])
+    if user is not None:
+        _user_cache[claims["sub"]] = (user, time.monotonic() + USER_CACHE_SECONDS)
+        return user
     if user is None:
         if settings.auth_mode != "supabase":
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Unknown user")

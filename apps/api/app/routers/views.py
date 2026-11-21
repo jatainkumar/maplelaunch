@@ -181,49 +181,57 @@ async def notifications_view(session: AsyncSession, user_id: str, app_id: str | 
              "email_status": n.email_status, "created_at": iso(n.created_at)} for n in rows]
 
 
-async def ops_detail(session: AsyncSession, app: Application) -> dict:
-    app_id = app.id
+def _rows(model, order, app_id: str):
+    async def run(session: AsyncSession) -> list:
+        return list((await session.execute(select(model).where(model.application_id == app_id).order_by(order))).scalars())
+    return run
+
+
+async def ops_detail(app: Application) -> dict:
+    """Everything the operator page shows. The lookups are independent, so they run in parallel."""
+    from app.db.session import read_parallel
     from app.services.applications import app_data
 
-    validations = (await session.execute(select(ValidationResult).where(ValidationResult.application_id == app_id)
-                                         .order_by(ValidationResult.outcome))).scalars()
-    callbacks = (await session.execute(select(CallbackEvent).where(CallbackEvent.application_id == app_id)
-                                       .order_by(CallbackEvent.received_at))).scalars()
-    transitions = (await session.execute(select(StateTransition).where(StateTransition.application_id == app_id)
-                                         .order_by(StateTransition.created_at))).scalars()
-    audit_rows = (await session.execute(select(AuditLog).where(AuditLog.application_id == app_id)
-                                        .order_by(AuditLog.id))).scalars()
-    reviews = (await session.execute(select(ReviewTask).where(ReviewTask.application_id == app_id)
-                                     .order_by(ReviewTask.created_at.desc()))).scalars()
-    decisions = (await session.execute(select(AgentDecision).where(AgentDecision.application_id == app_id)
-                                       .order_by(AgentDecision.created_at))).scalars()
-    exceptions = (await session.execute(select(OpsException).where(OpsException.application_id == app_id)
-                                        .order_by(OpsException.created_at.desc()))).scalars()
+    app_id = app.id
+    r = await read_parallel(
+        data=lambda s: app_data(s, app, reveal=False),
+        documents=lambda s: documents_view(s, app_id, reveal=False, include_inactive=True),
+        validations=_rows(ValidationResult, ValidationResult.outcome, app_id),
+        checks=lambda s: checks_view(s, app_id),
+        callbacks=_rows(CallbackEvent, CallbackEvent.received_at, app_id),
+        transitions=_rows(StateTransition, StateTransition.created_at, app_id),
+        audit=_rows(AuditLog, AuditLog.id, app_id),
+        reviews=_rows(ReviewTask, ReviewTask.created_at.desc(), app_id),
+        decisions=_rows(AgentDecision, AgentDecision.created_at, app_id),
+        duplicates=lambda s: open_duplicates(s, app_id),
+        info_requests=lambda s: info_requests_view(s, app_id),
+        exceptions=_rows(OpsException, OpsException.created_at.desc(), app_id),
+    )
     return {
         "application": app_summary(app),
-        "data": await app_data(session, app, reveal=False),
+        "data": r["data"],
         "risk": {"score": app.risk_score, "band": app.risk_band, "signals": app.risk_signals,
                  "explanation": app.risk_explanation},
-        "documents": await documents_view(session, app_id, reveal=False, include_inactive=True),
+        "documents": r["documents"],
         "validations": [{"rule": v.rule, "outcome": v.outcome, "blocking": v.blocking, "field": v.field,
-                         "slot": v.document_slot, "message": v.message} for v in validations],
-        "checks": await checks_view(session, app_id),
+                         "slot": v.document_slot, "message": v.message} for v in r["validations"]],
+        "checks": r["checks"],
         "callbacks": [{"provider": c.provider, "event_id": c.event_id, "outcome": c.outcome,
                        "status": c.reported_status, "duplicates": c.duplicate_count, "received_at": iso(c.received_at)}
-                      for c in callbacks],
+                      for c in r["callbacks"]],
         "transitions": [{"from": t.from_status, "to": t.to_status, "actor": t.actor, "reason": t.reason,
-                         "at": iso(t.created_at)} for t in transitions],
+                         "at": iso(t.created_at)} for t in r["transitions"]],
         "audit": [{"id": a.id, "actor": a.actor, "action": a.action, "details": a.details, "at": iso(a.created_at),
-                   "hash": a.hash[:12]} for a in audit_rows],
-        "reviews": [{"id": r.id, "kind": r.kind, "status": r.status, "summary": r.summary,
-                     "reason_codes": r.reason_codes, "recommendation": r.recommendation, "priority": r.priority,
-                     "decision": r.decision, "decision_note": r.decision_note, "assignee": r.assignee,
-                     "created_at": iso(r.created_at), "resolved_at": iso(r.resolved_at)} for r in reviews],
+                   "hash": a.hash[:12]} for a in r["audit"]],
+        "reviews": [{"id": x.id, "kind": x.kind, "status": x.status, "summary": x.summary,
+                     "reason_codes": x.reason_codes, "recommendation": x.recommendation, "priority": x.priority,
+                     "decision": x.decision, "decision_note": x.decision_note, "assignee": x.assignee,
+                     "created_at": iso(x.created_at), "resolved_at": iso(x.resolved_at)} for x in r["reviews"]],
         "decisions": [{"action": d.action, "reasoning": d.reasoning, "model": d.model, "used_fallback": d.used_fallback,
                        "rules_action": d.rules_action, "guardrail": d.guardrail, "args": d.args,
-                       "at": iso(d.created_at)} for d in decisions],
-        "duplicates": await open_duplicates(session, app_id),
-        "info_requests": await info_requests_view(session, app_id),
+                       "at": iso(d.created_at)} for d in r["decisions"]],
+        "duplicates": r["duplicates"],
+        "info_requests": r["info_requests"],
         "exceptions": [{"id": e.id, "kind": e.kind, "severity": e.severity, "message": e.message, "status": e.status,
-                        "created_at": iso(e.created_at)} for e in exceptions],
+                        "created_at": iso(e.created_at)} for e in r["exceptions"]],
     }
