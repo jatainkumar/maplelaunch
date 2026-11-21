@@ -39,6 +39,7 @@ dev = [
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+pythonpath = ["."]  # `uv run pytest` (as in CI) does not add the project folder to the import path
 
 [tool.ruff]
 line-length = 110
