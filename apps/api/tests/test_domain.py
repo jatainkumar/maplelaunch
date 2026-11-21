@@ -269,3 +269,15 @@ async def test_network_block_skips_every_key_of_that_provider(monkeypatch):
         assert result.content == "ok" and calls == ["groq#1", "gemini"]  # groq#2 was never tried
     finally:
         llm._cooldown.clear()
+
+
+def test_llm_cooldown_matches_the_limit():
+    from app.services.llm import COOLDOWN_SECONDS, MINUTE_COOLDOWN_SECONDS, cooldown_for
+
+    groq_minute = Exception("Error code: 429 - Rate limit reached for model `m` on input tokens per minute (ITPM): "
+                            "Limit 30000, Used 29000. Please try again in 4.25s.")
+    assert 5 <= cooldown_for(groq_minute) < 6
+    assert cooldown_for(Exception("429 rate limit ... Please try again in 2m3.5s")) == 2 * 60 + 3.5 + 1
+    assert cooldown_for(Exception("429 tokens per minute (TPM) exceeded")) == MINUTE_COOLDOWN_SECONDS
+    assert cooldown_for(Exception("RESOURCE_EXHAUSTED quota GenerateRequestsPerDay exceeded")) == COOLDOWN_SECONDS
+    assert cooldown_for(Exception("429 Too Many Requests")) == COOLDOWN_SECONDS

@@ -7,7 +7,7 @@ flowchart TD
   subgraph M["1 · Merchant portal"]
     A1([Merchant signs in]) --> A2["Choose business type<br/>Proprietorship · Partnership · Pvt Ltd"]
     A2 --> A3["Upload documents<br/>checklist adapts to business type"]
-    A3 --> A4["AI autofill<br/>Gemini, Groq as fallback"]
+    A3 --> A4["AI autofill<br/>Groq, Gemini as fallback"]
     A4 --> A5["Review fields<br/>confidence badge on each"]
     A5 --> A6["Bank details<br/>live IFSC lookup"]
     A6 --> A7[Consent and submit]

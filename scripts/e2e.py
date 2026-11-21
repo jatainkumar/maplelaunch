@@ -23,6 +23,8 @@ EXPECT = {  # persona -> final status and key events that must appear in the aud
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")  # Windows consoles default to cp1252
     ap = argparse.ArgumentParser()
     ap.add_argument("personas", nargs="*", default=list(EXPECT))
     ap.add_argument("--api", default="http://localhost:8000")

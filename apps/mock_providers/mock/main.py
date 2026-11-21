@@ -17,14 +17,23 @@ import random
 import time
 import uuid
 from contextlib import asynccontextmanager, suppress
-from datetime import date, datetime, timedelta, UTC
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from sqlalchemy import JSON, DateTime, Integer, String, Text, UniqueConstraint, select, text
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    select,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -419,13 +428,13 @@ async def deliver_loop():
                                 raise RuntimeError(f"receiver returned {r.status_code}")
                             cb.status = "sent" if r.status_code < 400 else "rejected"
                             cb.last_error = None if r.status_code < 400 else r.text[:300]
-                        except Exception as exc:  # receiver asleep/down: retry with backoff, like real providers
+                        except Exception as exc:  # noqa: BLE001  receiver asleep or down: retry with backoff, like real providers
                             cb.last_error = str(exc)[:300]
                             if cb.attempts >= 8:
                                 cb.status = "failed"
                             else:
                                 cb.send_at = now() + timedelta(seconds=min(2 ** cb.attempts, 60))
                     await s.commit()
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001  the delivery loop must never die
                 print("deliver_loop error:", exc)
             await asyncio.sleep(0.5)

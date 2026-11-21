@@ -35,7 +35,22 @@ class LLMResult:
 
 # Provider/model -> monotonic time until which it is skipped (free-tier rate limits and daily quotas).
 _cooldown: dict[str, float] = {}
-COOLDOWN_SECONDS = 600
+COOLDOWN_SECONDS = 600  # daily quotas, bad keys, network blocks
+MINUTE_COOLDOWN_SECONDS = 60  # per-minute limits clear quickly; benching the model for 10 minutes wastes it
+_RETRY_IN = re.compile(r"try again in (?:(\d+)m)?([\d.]+)s", re.IGNORECASE)
+
+
+def cooldown_for(exc: Exception) -> float:
+    """How long to skip a model after this error. Providers often say exactly when to retry."""
+    text = str(exc)
+    if m := _RETRY_IN.search(text):
+        return min(COOLDOWN_SECONDS, int(m.group(1) or 0) * 60 + float(m.group(2)) + 1)
+    lowered = text.lower()
+    if any(k in lowered for k in ("per day", "perday", "(rpd)", "(tpd)", "daily")):
+        return COOLDOWN_SECONDS
+    if any(k in lowered for k in ("per minute", "perminute", "(rpm)", "(tpm)", "(itpm)", "(otpm)")):
+        return MINUTE_COOLDOWN_SECONDS
+    return COOLDOWN_SECONDS
 
 
 def _gemini_factory(model: str):
@@ -116,7 +131,9 @@ async def invoke(messages: list, kind: str = "text", tools: list | None = None,
                 for other, _ in candidates:
                     if other.startswith(provider):
                         _cooldown[other] = time.monotonic() + COOLDOWN_SECONDS
-            elif _rate_limited(exc) or _blocked(exc):
+            elif _rate_limited(exc):
+                _cooldown[label] = time.monotonic() + cooldown_for(exc)
+            elif _blocked(exc):
                 _cooldown[label] = time.monotonic() + COOLDOWN_SECONDS
             log.warning("llm_provider_failed", provider=label, error=str(exc)[:300])
             errors.append(f"{label}: {type(exc).__name__}")
