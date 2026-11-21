@@ -19,16 +19,6 @@ const NAV: { href: string; label: string; icon: ReactNode; roles: User["role"][]
   { href: "/admin/policy/", label: "Policy", icon: <ScrollText className="h-4 w-4" />, roles: ["operator", "admin"] },
 ];
 
-export function DemoBanner() {
-  if (!IS_DEMO) return null;
-  return (
-    <div className="bg-zinc-900 px-4 py-1.5 text-center text-xs text-zinc-300">
-      Demo environment · use <span className="font-medium text-white">synthetic documents only</span>. Uploads are
-      processed by free-tier AI services. Verification providers are simulated.
-    </div>
-  );
-}
-
 export function AppShell({ roles, children, wide }: { roles: User["role"][]; children: ReactNode; wide?: boolean }) {
   const { user, ready, signOut } = useAuth();
   const router = useRouter();
@@ -44,7 +34,6 @@ export function AppShell({ roles, children, wide }: { roles: User["role"][]; chi
 
   return (
     <div className="flex min-h-screen flex-col">
-      <DemoBanner />
       <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/90 backdrop-blur">
         <div className={cn("mx-auto flex h-14 items-center gap-6 px-4 sm:px-6", wide ? "max-w-7xl" : "max-w-6xl")}>
           <Link href={user.role === "merchant" ? "/merchant/" : "/ops/"}>

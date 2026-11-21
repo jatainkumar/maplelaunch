@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm.exc import StaleDataError
 
-from app.core.config import get_settings, production_problems
+from app.core.config import get_settings, production_problems, supabase_problems
 from app.core.logging import configure_logging, log
 from app.core.security import seed_users
 from app.db.session import init_db, session_scope
@@ -26,6 +26,8 @@ configure_logging()
 async def lifespan(_: FastAPI):
     if not settings.is_demo and (problems := production_problems(settings)):
         raise RuntimeError("Refusing to start in production mode: " + "; ".join(problems))
+    if problems := supabase_problems(settings):
+        raise RuntimeError("Supabase is not configured: " + "; ".join(problems))
     await init_db()
     async with session_scope() as s:
         await get_active_policy(s)

@@ -208,3 +208,14 @@ def test_database_url_copy_paste_mistakes_are_caught():
     assert "placeholder" in database_url_problem("postgresql://postgres.ref:secret@aws-0-<region>.pooler.supabase.com")
     assert "%40" in database_url_problem(f"postgresql://postgres.ref:se@cret@{host}")
     assert database_url_problem(f"postgresql://postgres.ref:se%40cret@{host}") is None
+
+
+def test_supabase_settings_are_checked_at_startup():
+    from app.core.config import Settings, supabase_problems
+
+    base = dict(_env_file=None, auth_mode="supabase", storage_mode="supabase", supabase_url="https://x.supabase.co",
+                supabase_anon_key="sb_publishable_abc")
+    assert any("SECRET" in p.upper() for p in supabase_problems(Settings(**base)))
+    assert any("publishable" in p for p in supabase_problems(Settings(**base, supabase_service_role_key="sb_publishable_abc")))
+    assert supabase_problems(Settings(**base, supabase_service_role_key="sb_secret_xyz")) == []
+    assert supabase_problems(Settings(_env_file=None, auth_mode="local", storage_mode="local")) == []

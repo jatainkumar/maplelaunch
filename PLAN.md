@@ -444,3 +444,5 @@ maplelaunch/
   now a fallback list of models (each has its own quota). Rate-limited models cool down for 10 minutes, and an
   extracted identifier that fails its checksum makes the next model re-read the document.
 - **Merchant withdrawal** is allowed at any point before approval, under the workflow's per-application lock.
+- **No demo banner.** The top-of-page notice was removed on request; the demo still ships synthetic samples
+  and records consent at submission.

@@ -41,7 +41,7 @@ The same code builds two separate products, selected by `APP_MODE` (API) and `NE
 | Accounts | One-click demo merchant, operator and admin | Merchant self-signup; first admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD` |
 | Sample documents, "Use sample fix" | Yes | No (the `/demo/*` routes are not mounted) |
 | Scenario lab, provider behaviour switches, "Reset demo data" | Yes | No (the API returns 404); admins see background jobs only |
-| Demo banner and email footer | Yes | No |
+| "Demo environment" email footer | Yes | No |
 | Startup checks | Development defaults allowed | Refuses to start with development secrets or a local database |
 | Data | Its own Supabase project | Its own Supabase project, never shared with the demo |
 
@@ -144,8 +144,8 @@ status only ever moves forward within an attempt.
 * **Documents** live in a private bucket; viewing uses 60-second signed URLs, and staff views are audited.
 * **Webhooks** are HMAC-SHA256-signed with a ±5 min timestamp window.
 * The **audit log is tamper-evident**: each entry hashes the previous one, and the UI verifies the chain.
-* **Explicit consent** is recorded at submission. Free-tier LLMs may retain inputs, so the app ships synthetic
-  documents and shows a "synthetic data only" banner.
+* **Explicit consent** is recorded at submission. Free-tier LLMs may retain inputs, so the demo ships synthetic
+  sample documents; use those rather than real ones.
 
 ---
 

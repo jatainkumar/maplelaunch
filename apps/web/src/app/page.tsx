@@ -8,7 +8,6 @@ import { toast } from "sonner";
 
 import { Logo } from "@/components/logo";
 import { homeFor, useAuth } from "@/components/providers";
-import { DemoBanner } from "@/components/shell";
 import { Button } from "@/components/ui";
 import type { User } from "@/lib/api";
 import { IS_DEMO } from "@/lib/mode";
@@ -48,7 +47,6 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen">
-      <DemoBanner />
       <header className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         <Logo />
         {user ? (

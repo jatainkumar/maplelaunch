@@ -114,6 +114,24 @@ def production_problems(s: "Settings") -> list[str]:
     return problems
 
 
+def supabase_problems(s: "Settings") -> list[str]:
+    """When Supabase handles auth or storage, its URL and keys must be present (and the right kind of key)."""
+    if "supabase" not in (s.auth_mode, s.storage_mode):
+        return []
+    problems = []
+    if not s.supabase_url.startswith("https://"):
+        problems.append("SUPABASE_URL must be your project URL, e.g. https://<ref>.supabase.co")
+    if s.auth_mode == "supabase" and not s.supabase_anon_key:
+        problems.append("SUPABASE_ANON_KEY is empty (Supabase -> Project Settings -> API Keys -> publishable key)")
+    service = s.supabase_service_role_key
+    if not service:
+        problems.append("SUPABASE_SERVICE_ROLE_KEY is empty (Supabase -> Project Settings -> API Keys -> secret key, "
+                        "sb_secret_...)")
+    elif service.startswith("sb_publishable_") or service == s.supabase_anon_key:
+        problems.append("SUPABASE_SERVICE_ROLE_KEY is the publishable key; it must be the secret key (sb_secret_...)")
+    return problems
+
+
 def database_url_problem(url: str) -> str | None:
     """Catch the usual copy-paste mistakes in DATABASE_URL before they surface as a DNS error."""
     if any(p in url for p in ("<", ">", "[YOUR-PASSWORD]", "YOUR-PASSWORD")):
