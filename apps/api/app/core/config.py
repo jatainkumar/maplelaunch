@@ -137,6 +137,8 @@ def get_settings() -> Settings:
         try:
             s.database_url = resolve(s.database_url)
         except ImportError as exc:  # pgserver is a dev-only dependency
-            raise RuntimeError("DATABASE_URL is not set. Use the Supabase Session pooler URL (port 5432).") from exc
+            raise RuntimeError(
+                "DATABASE_URL is 'pgserver' (or missing), which only works for local development. Set it to the "
+                "Supabase Session pooler URL (port 5432).") from exc
 
     return s

@@ -150,7 +150,8 @@ Also note that Supabase pauses free projects after 7 days without activity; the 
 
 | Symptom | Likely cause and fix |
 |---|---|
-| Mock service crashes with `No module named 'pgserver'` or `DATABASE_URL is not set` | The service has no `DATABASE_URL`. Render → `maplelaunch-mock` → **Environment** → add `DATABASE_URL` with the same value as the API → save (it redeploys). |
+| API or mock crashes with `No module named 'pgserver'` or `DATABASE_URL is 'pgserver'` | `DATABASE_URL` is missing or still the local-development value. Set it on **both** `maplelaunch-api` and `maplelaunch-mock` (Render → service → **Environment**) to the Supabase Session pooler URL, then save (it redeploys). |
+| Webhooks never arrive, CORS errors, or sign-in fails after deploy | A local `.env` was pasted into Render and overwrote deploy settings. Delete `PUBLIC_API_URL`, `PROVIDERS_BASE_URL` and `WEB_ORIGIN` if they say `localhost` (the Blueprint wires them), and make sure `AUTH_MODE` and `STORAGE_MODE` are `supabase`. |
 | API deploy fails with `connection refused` or `Network is unreachable` | `DATABASE_URL` uses the direct host. Use the Session pooler string (port 5432). |
 | `password authentication failed` | Wrong database password, or special characters not URL-encoded. |
 | Port 6543 in `DATABASE_URL` | That is the transaction pooler, which breaks per-application locking. Use the Session pooler (port 5432). |
