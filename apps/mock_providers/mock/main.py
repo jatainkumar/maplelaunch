@@ -45,7 +45,12 @@ class Settings(BaseSettings):
 
 settings = Settings()
 if settings.database_url == "pgserver":
-    import pgserver
+    try:
+        import pgserver  # embedded Postgres for local development only
+    except ImportError as exc:
+        raise RuntimeError(
+            "DATABASE_URL is not set. On Render, set it on this service to the same Supabase Session pooler URL "
+            "as the API (port 5432).") from exc
 
     Path(settings.pgserver_dir).mkdir(parents=True, exist_ok=True)
     settings.database_url = pgserver.get_server(settings.pgserver_dir, cleanup_mode=None).get_uri()

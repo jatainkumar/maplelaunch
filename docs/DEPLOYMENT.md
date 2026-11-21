@@ -81,7 +81,7 @@ recorded as failed in the notification log. The in-app inbox always works.
 
    | Variable | Value |
    |---|---|
-   | `DATABASE_URL` | Session pooler string from step 2.3 |
+   | `DATABASE_URL` (asked twice: API and mock services) | Session pooler string from step 2.3, the same value for both |
    | `SUPABASE_URL` | Project URL |
    | `SUPABASE_ANON_KEY` | Publishable (anon) key |
    | `SUPABASE_SERVICE_ROLE_KEY` | Secret (service_role) key |
@@ -150,6 +150,7 @@ Also note that Supabase pauses free projects after 7 days without activity; the 
 
 | Symptom | Likely cause and fix |
 |---|---|
+| Mock service crashes with `No module named 'pgserver'` or `DATABASE_URL is not set` | The service has no `DATABASE_URL`. Render → `maplelaunch-mock` → **Environment** → add `DATABASE_URL` with the same value as the API → save (it redeploys). |
 | API deploy fails with `connection refused` or `Network is unreachable` | `DATABASE_URL` uses the direct host. Use the Session pooler string (port 5432). |
 | `password authentication failed` | Wrong database password, or special characters not URL-encoded. |
 | Port 6543 in `DATABASE_URL` | That is the transaction pooler, which breaks per-application locking. Use the Session pooler (port 5432). |

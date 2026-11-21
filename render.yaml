@@ -71,8 +71,8 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.8
-      - key: DATABASE_URL
-        fromService: { type: web, name: maplelaunch-api, envVarKey: DATABASE_URL }
+      - key: DATABASE_URL          # same Session pooler URL as the API (enter it again here)
+        sync: false
       - key: WEBHOOK_SECRET
         fromService: { type: web, name: maplelaunch-api, envVarKey: WEBHOOK_SECRET }
       - key: PROVIDER_ADMIN_TOKEN

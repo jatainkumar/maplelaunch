@@ -21,7 +21,7 @@ from app.db.models import (
     utcnow,
 )
 from app.db.session import get_session
-from app.domain.states import CHECK_IN_FLIGHT, S
+from app.domain.states import CHECK_IN_FLIGHT, TERMINAL, S
 from app.jobs.queue import enqueue
 from app.routers import views
 from app.services.applications import PII_FIELDS, get_pii
@@ -104,7 +104,8 @@ async def detail(app_id: str, user: User = Depends(staff), s: AsyncSession = Dep
     out = await views.ops_detail(s, app)
     out["audit_chain"] = await verify_chain(s, app_id)
     try:
-        out["waiting_for"] = await runner.waiting_for(app_id)
+        # A closed (withdrawn / rejected) application is not waiting for anyone, whatever the checkpoint says.
+        out["waiting_for"] = None if S(app.status) in TERMINAL else await runner.waiting_for(app_id)
     except Exception:
         out["waiting_for"] = None
     return out
