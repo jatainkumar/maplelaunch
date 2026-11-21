@@ -78,7 +78,13 @@ async def get_mid(idempotency_key: str) -> dict | None:
 
 
 async def admin(method: str, path: str, json: dict | None = None) -> dict:
-    async with httpx.AsyncClient(base_url=settings.providers_base_url, timeout=TIMEOUT) as c:
-        r = await c.request(method, path, json=json, headers={"X-Admin-Token": settings.provider_admin_token})
-        r.raise_for_status()
-        return r.json()
+    """Scenario controls on the provider service. Retries briefly, because on free hosting the service may be waking
+    up or restarting (Render answers 502/503 meanwhile)."""
+    async for attempt in AsyncRetrying(stop=stop_after_attempt(4), wait=wait_exponential(multiplier=2, max=10),
+                                       retry=retry_if_exception(_retryable), reraise=True):
+        with attempt:
+            async with httpx.AsyncClient(base_url=settings.providers_base_url, timeout=TIMEOUT) as c:
+                r = await c.request(method, path, json=json, headers={"X-Admin-Token": settings.provider_admin_token})
+                r.raise_for_status()
+                return r.json()
+    raise RuntimeError("unreachable")
